@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-# Phase 3 age encryption helper. Decryption remains a future-phase placeholder.
+# age encryption and restore decryption helpers.
 
 encrypt_archive() {
     local input_file="$1"
@@ -18,6 +18,17 @@ encrypt_archive() {
         --output "$output_file" "$input_file"
 }
 
-decrypt_backup() {
-    fatal "Decryption is not implemented in Phase 3"
+decrypt_archive() {
+    local input_file="$1"
+    local output_file="$2"
+    local identity_file="$3"
+
+    if [[ "$DRY_RUN" == "true" ]]; then
+        info "DRY RUN: would decrypt $input_file with age identity $identity_file"
+        return 0
+    fi
+
+    info "Decrypting archive with age"
+    "$AGE_BINARY" --decrypt --identity "$identity_file" \
+        --output "$output_file" "$input_file"
 }

@@ -14,6 +14,8 @@ source "${SCRIPT_DIR}/lib/common.sh"
 source "${SCRIPT_DIR}/lib/archive.sh"
 # shellcheck source=lib/encrypt.sh
 source "${SCRIPT_DIR}/lib/encrypt.sh"
+# shellcheck source=lib/upload_ftp.sh
+source "${SCRIPT_DIR}/lib/upload_ftp.sh"
 
 usage() {
     printf 'Usage: %s CONFIG_FILE [--dry-run]\n' "$0"
@@ -106,6 +108,9 @@ if [[ "$ENCRYPTION_ENABLED" == "true" ]]; then
     [[ -f "$AGE_RECIPIENTS_FILE" && -r "$AGE_RECIPIENTS_FILE" ]] \
         || fatal "Age recipients file is missing or unreadable: $AGE_RECIPIENTS_FILE"
 fi
+if [[ "$FTP_ENABLED" == "true" ]]; then
+    require_command lftp
+fi
 
 for source_path in "${BACKUP_PATHS[@]}"; do
     validate_source_path "$source_path"
@@ -119,7 +124,7 @@ for command_output in "${COMMAND_OUTPUTS[@]}"; do
     SEEN_OUTPUT_NAMES["$output_name"]=1
 done
 
-info "Phase 3 local backup started"
+info "Phase 5 backup started"
 info "Backup name: $BACKUP_NAME"
 info "Configuration: $CONFIG_FILE"
 info "Dry run: $DRY_RUN"
@@ -127,7 +132,9 @@ info "Working directory: $WORK_DIR"
 info "Archive: $ARCHIVE"
 info "Configured paths: ${#BACKUP_PATHS[@]}"
 info "Configured command outputs: ${#COMMAND_OUTPUTS[@]}"
+info "Diagnostic command failures are fatal: $COMMAND_OUTPUTS_FATAL"
 info "Encryption enabled: $ENCRYPTION_ENABLED"
+info "FTP upload enabled: $FTP_ENABLED"
 if [[ "$ENCRYPTION_ENABLED" == "true" ]]; then
     info "Age recipients file: $AGE_RECIPIENTS_FILE"
     info "Age executable: $AGE_BINARY"
@@ -164,9 +171,15 @@ for command_output in "${COMMAND_OUTPUTS[@]}"; do
         info "DRY RUN: would run command and write command_outputs/$output_name"
     else
         info "Capturing command output: $output_name"
-        if ! bash -o pipefail -c "$output_command" \
+        if bash -o pipefail -c "$output_command" \
             > "${WORK_DIR}/command_outputs/${output_name}" 2>&1; then
-            fatal "Command failed while creating command_outputs/$output_name"
+            info "Diagnostic command completed: $output_name"
+        else
+            command_status=$?
+            if [[ "$COMMAND_OUTPUTS_FATAL" == "true" ]]; then
+                fatal "Diagnostic command failed with exit code $command_status: $output_name"
+            fi
+            warn "Diagnostic command failed with exit code $command_status; continuing: $output_name"
         fi
     fi
 done
@@ -213,4 +226,10 @@ else
     info "Checksum: ${FINAL_ARCHIVE}.sha256"
 fi
 
-info "Phase 3 flow complete; FTP upload and retention were not run"
+if [[ "$FTP_ENABLED" == "true" ]]; then
+    upload_backup_ftp "$FINAL_ARCHIVE"
+else
+    info "FTP upload is disabled"
+fi
+
+info "Phase 5 flow complete; remote retention was not run"

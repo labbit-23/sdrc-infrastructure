@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
+umask 077
 
-# Non-destructive restore: verify, decrypt, and extract to a chosen directory.
+# Restore from a local archive or an explicitly selected FTP backup.
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 BACKUP_BASE_DIR="$SCRIPT_DIR"
@@ -13,20 +14,27 @@ source "${SCRIPT_DIR}/lib/common.sh"
 source "${SCRIPT_DIR}/lib/archive.sh"
 # shellcheck source=lib/encrypt.sh
 source "${SCRIPT_DIR}/lib/encrypt.sh"
+# shellcheck source=lib/upload_ftp.sh
+source "${SCRIPT_DIR}/lib/upload_ftp.sh"
 
 usage() {
-    printf 'Usage: %s CONFIG_FILE ARCHIVE RESTORE_DIR [--dry-run]\n' "$0"
+    printf 'Usage: %s CONFIG_FILE ARCHIVE_OR_REMOTE_FILENAME RESTORE_DIR [--ftp] [--force] [--dry-run]\n' "$0"
 }
 
 [[ $# -ge 3 ]] || { usage >&2; exit 2; }
 CONFIG_FILE="$1"
-ARCHIVE="$2"
+SOURCE_ARCHIVE="$2"
 RESTORE_DIR="$3"
 shift 3
+
 DRY_RUN=false
+FORCE=false
+FTP_SOURCE=false
 
 while (( $# > 0 )); do
     case "$1" in
+        --ftp) FTP_SOURCE=true ;;
+        --force) FORCE=true ;;
         --dry-run) DRY_RUN=true ;;
         -h|--help) usage; exit 0 ;;
         *) usage >&2; fatal "Unknown argument: $1" ;;
@@ -34,28 +42,52 @@ while (( $# > 0 )); do
     shift
 done
 
+[[ -n "$RESTORE_DIR" && "$RESTORE_DIR" != "/" ]] \
+    || fatal "RESTORE_DIR must not be empty or the filesystem root"
+
 RUN_TIMESTAMP="$(date -u +'%Y%m%dT%H%M%SZ')"
+RUN_ID="${RUN_TIMESTAMP}_$$"
 load_config "$CONFIG_FILE"
 init_logging restore
 
+if [[ -e "$RESTORE_DIR" || -L "$RESTORE_DIR" ]]; then
+    [[ "$FORCE" == "true" ]] || fatal "Restore directory already exists; use --force to overwrite: $RESTORE_DIR"
+    [[ -d "$RESTORE_DIR" ]] || fatal "Restore destination exists and is not a directory: $RESTORE_DIR"
+fi
+
+ARCHIVE_NAME="$(basename "$SOURCE_ARCHIVE")"
+case "$ARCHIVE_NAME" in
+    *.tar.zst.age) ARCHIVE_ENCRYPTED=true ;;
+    *.tar.zst) ARCHIVE_ENCRYPTED=false ;;
+    *) fatal "Archive must end in .tar.zst or .tar.zst.age: $ARCHIVE_NAME" ;;
+esac
+
 require_command sha256sum
-require_command age
 require_command tar
 require_command zstd
 
-[[ -f "$ARCHIVE" ]] || {
-    [[ "$DRY_RUN" == "true" ]] || fatal "Archive not found: $ARCHIVE"
-    warn "DRY RUN: archive does not exist; continuing for flow validation"
-}
-
-if [[ -d "$RESTORE_DIR" && -n "$(find "$RESTORE_DIR" -mindepth 1 -maxdepth 1 -print -quit)" ]]; then
-    fatal "Restore directory must be empty: $RESTORE_DIR"
+if [[ "$ARCHIVE_ENCRYPTED" == "true" ]]; then
+    command -v "$AGE_BINARY" >/dev/null 2>&1 \
+        || fatal "Required age executable not found: $AGE_BINARY"
+    [[ -n "$AGE_IDENTITY_FILE" ]] || fatal "AGE_IDENTITY_FILE is required for encrypted restore"
+    [[ "$AGE_IDENTITY_FILE" == /* ]] || fatal "AGE_IDENTITY_FILE must be an absolute path"
+    [[ -f "$AGE_IDENTITY_FILE" && -r "$AGE_IDENTITY_FILE" ]] \
+        || fatal "Age identity file is missing or unreadable: $AGE_IDENTITY_FILE"
 fi
 
-RESTORE_WORK_DIR="${TMPDIR:-/tmp}/${BACKUP_NAME}_restore_${RUN_TIMESTAMP}.dry-run"
+if [[ "$FTP_SOURCE" == "true" ]]; then
+    [[ "$SOURCE_ARCHIVE" == "$ARCHIVE_NAME" \
+        && "$ARCHIVE_NAME" =~ ^[A-Za-z0-9._-]+$ ]] \
+        || fatal "FTP source must be a remote filename without a path"
+    validate_ftp_connection_config
+    require_command lftp
+fi
+
+RESTORE_WORK_DIR="${TMPDIR:-/tmp}/${BACKUP_NAME}_restore_${RUN_ID}.dry-run"
 if [[ "$DRY_RUN" != "true" ]]; then
-    RESTORE_WORK_DIR="$(mktemp -d "${TMPDIR:-/tmp}/${BACKUP_NAME}_restore_${RUN_TIMESTAMP}.XXXXXX")"
+    RESTORE_WORK_DIR="$(mktemp -d "${TMPDIR:-/tmp}/${BACKUP_NAME}_restore_${RUN_ID}.XXXXXX")"
 fi
+
 cleanup() {
     local exit_code=$?
     if [[ "$DRY_RUN" != "true" && -d "$RESTORE_WORK_DIR" ]]; then
@@ -64,22 +96,38 @@ cleanup() {
     if (( exit_code != 0 )); then
         warn "Restore failed with exit code $exit_code"
     fi
-    exit "$exit_code"
 }
 trap cleanup EXIT
 
-DECRYPTED_ARCHIVE="${RESTORE_WORK_DIR}/${BACKUP_NAME}.tar.zst"
-info "Starting non-destructive restore verification"
+if [[ "$FTP_SOURCE" == "true" ]]; then
+    ARCHIVE="${RESTORE_WORK_DIR}/${ARCHIVE_NAME}"
+    download_backup_ftp "$ARCHIVE_NAME" "$RESTORE_WORK_DIR"
+else
+    ARCHIVE="$SOURCE_ARCHIVE"
+    if [[ ! -f "$ARCHIVE" ]]; then
+        [[ "$DRY_RUN" == "true" ]] \
+            || fatal "Local archive not found: $ARCHIVE"
+        warn "DRY RUN: local archive does not exist; continuing for flow validation"
+    fi
+fi
+
+info "Verifying backup checksum before decryption or extraction"
 verify_checksum "$ARCHIVE"
 
+COMPRESSED_ARCHIVE="$ARCHIVE"
+if [[ "$ARCHIVE_ENCRYPTED" == "true" ]]; then
+    COMPRESSED_ARCHIVE="${RESTORE_WORK_DIR}/${ARCHIVE_NAME%.age}"
+    decrypt_archive "$ARCHIVE" "$COMPRESSED_ARCHIVE" "$AGE_IDENTITY_FILE"
+fi
+
 if [[ "$DRY_RUN" == "true" ]]; then
-    info "DRY RUN: decrypt $ARCHIVE to temporary compressed archive"
-    info "DRY RUN: create $RESTORE_DIR and extract with zstd and tar"
+    info "DRY RUN: would create or overwrite restore directory: $RESTORE_DIR"
+    info "DRY RUN: would extract $COMPRESSED_ARCHIVE with zstd and tar"
 else
-    decrypt_backup "$ARCHIVE" "$DECRYPTED_ARCHIVE"
     mkdir -p "$RESTORE_DIR"
-    zstd -q -d -c "$DECRYPTED_ARCHIVE" | tar -C "$RESTORE_DIR" -xf -
+    info "Extracting backup into: $RESTORE_DIR"
+    zstd -q -d -c "$COMPRESSED_ARCHIVE" | tar -C "$RESTORE_DIR" -xf -
 fi
 
 info "Restore extraction completed: $RESTORE_DIR"
-info "No data was written back to any live system"
+info "No data was written back outside the selected restore directory"

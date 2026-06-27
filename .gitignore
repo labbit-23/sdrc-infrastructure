@@ -27,6 +27,8 @@ backup/archives/
 # age and GPG keys
 *.agekey
 age-key.txt
+sdrc-backup-key.txt
+*age-identity*.txt
 *.gpg
 *.pgp
 *.asc

@@ -2,7 +2,7 @@
 set -euo pipefail
 umask 077
 
-# Phase 2 local backup orchestration. The config file must be the first argument.
+# Phase 3 local backup and optional encryption orchestration.
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 BACKUP_BASE_DIR="$SCRIPT_DIR"
@@ -12,6 +12,8 @@ BACKUP_LOG_DIR="${SCRIPT_DIR}/logs"
 source "${SCRIPT_DIR}/lib/common.sh"
 # shellcheck source=lib/archive.sh
 source "${SCRIPT_DIR}/lib/archive.sh"
+# shellcheck source=lib/encrypt.sh
+source "${SCRIPT_DIR}/lib/encrypt.sh"
 
 usage() {
     printf 'Usage: %s CONFIG_FILE [--dry-run]\n' "$0"
@@ -39,6 +41,8 @@ init_logging backup
 WORK_DIR="${BACKUP_WORK_ROOT}/${BACKUP_NAME}_${RUN_ID}"
 ARCHIVE="${BACKUP_OUTPUT_DIR}/${BACKUP_NAME}_${RUN_ID}.tar.zst"
 ARCHIVE_PARTIAL="${ARCHIVE}.partial"
+ENCRYPTED_ARCHIVE="${ARCHIVE}.age"
+ENCRYPTED_ARCHIVE_PARTIAL="${ENCRYPTED_ARCHIVE}.partial"
 ARCHIVE_COMPLETE=false
 
 cleanup() {
@@ -46,7 +50,9 @@ cleanup() {
 
     if (( exit_code != 0 )) && [[ "$DRY_RUN" != "true" && "$ARCHIVE_COMPLETE" != "true" ]]; then
         rm -f -- "$ARCHIVE_PARTIAL" "$ARCHIVE" \
-            "${ARCHIVE}.sha256.partial" "${ARCHIVE}.sha256"
+            "${ARCHIVE}.sha256.partial" "${ARCHIVE}.sha256" \
+            "$ENCRYPTED_ARCHIVE_PARTIAL" "$ENCRYPTED_ARCHIVE" \
+            "${ENCRYPTED_ARCHIVE}.sha256.partial" "${ENCRYPTED_ARCHIVE}.sha256"
         warn "Removed incomplete backup outputs"
     fi
 
@@ -92,6 +98,14 @@ validate_command_output() {
 require_command tar
 require_command zstd
 require_command sha256sum
+if [[ "$ENCRYPTION_ENABLED" == "true" ]]; then
+    command -v "$AGE_BINARY" >/dev/null 2>&1 \
+        || fatal "Required age executable not found: $AGE_BINARY"
+    [[ -n "$AGE_RECIPIENTS_FILE" ]] || fatal "AGE_RECIPIENTS_FILE is required when encryption is enabled"
+    [[ "$AGE_RECIPIENTS_FILE" == /* ]] || fatal "AGE_RECIPIENTS_FILE must be an absolute path"
+    [[ -f "$AGE_RECIPIENTS_FILE" && -r "$AGE_RECIPIENTS_FILE" ]] \
+        || fatal "Age recipients file is missing or unreadable: $AGE_RECIPIENTS_FILE"
+fi
 
 for source_path in "${BACKUP_PATHS[@]}"; do
     validate_source_path "$source_path"
@@ -105,7 +119,7 @@ for command_output in "${COMMAND_OUTPUTS[@]}"; do
     SEEN_OUTPUT_NAMES["$output_name"]=1
 done
 
-info "Phase 2 local backup started"
+info "Phase 3 local backup started"
 info "Backup name: $BACKUP_NAME"
 info "Configuration: $CONFIG_FILE"
 info "Dry run: $DRY_RUN"
@@ -113,6 +127,12 @@ info "Working directory: $WORK_DIR"
 info "Archive: $ARCHIVE"
 info "Configured paths: ${#BACKUP_PATHS[@]}"
 info "Configured command outputs: ${#COMMAND_OUTPUTS[@]}"
+info "Encryption enabled: $ENCRYPTION_ENABLED"
+if [[ "$ENCRYPTION_ENABLED" == "true" ]]; then
+    info "Age recipients file: $AGE_RECIPIENTS_FILE"
+    info "Age executable: $AGE_BINARY"
+    info "Keep unencrypted archive: $KEEP_UNENCRYPTED_ARCHIVE"
+fi
 
 if [[ "$DRY_RUN" == "true" ]]; then
     info "DRY RUN: would create working and output directories"
@@ -157,16 +177,40 @@ if [[ "$DRY_RUN" == "true" ]]; then
 else
     mv -- "$ARCHIVE_PARTIAL" "$ARCHIVE"
 fi
-generate_checksum "$ARCHIVE"
+FINAL_ARCHIVE="$ARCHIVE"
+if [[ "$ENCRYPTION_ENABLED" == "true" ]]; then
+    encrypt_archive "$ARCHIVE" "$ENCRYPTED_ARCHIVE_PARTIAL" "$AGE_RECIPIENTS_FILE"
+    if [[ "$DRY_RUN" == "true" ]]; then
+        info "DRY RUN: would atomically publish encrypted archive as $ENCRYPTED_ARCHIVE"
+    else
+        mv -- "$ENCRYPTED_ARCHIVE_PARTIAL" "$ENCRYPTED_ARCHIVE"
+    fi
+
+    FINAL_ARCHIVE="$ENCRYPTED_ARCHIVE"
+    generate_checksum "$FINAL_ARCHIVE"
+
+    if [[ "$KEEP_UNENCRYPTED_ARCHIVE" == "false" ]]; then
+        if [[ "$DRY_RUN" == "true" ]]; then
+            info "DRY RUN: would remove the unencrypted archive after successful encryption"
+        else
+            rm -- "$ARCHIVE"
+            info "Removed unencrypted archive after successful encryption"
+        fi
+    else
+        info "Keeping unencrypted archive as configured: $ARCHIVE"
+    fi
+else
+    generate_checksum "$FINAL_ARCHIVE"
+fi
 
 if [[ "$DRY_RUN" == "true" ]]; then
     info "DRY RUN complete; no working directory, archive, or checksum was created"
 else
     ARCHIVE_COMPLETE=true
-    archive_size="$(stat -c '%s' "$ARCHIVE")"
+    archive_size="$(stat -c '%s' "$FINAL_ARCHIVE")"
     info "Archive size: ${archive_size} bytes"
-    info "Local backup completed successfully: $ARCHIVE"
-    info "Checksum: ${ARCHIVE}.sha256"
+    info "Local backup completed successfully: $FINAL_ARCHIVE"
+    info "Checksum: ${FINAL_ARCHIVE}.sha256"
 fi
 
-info "Phase 2 flow stopped after compression and checksum generation"
+info "Phase 3 flow complete; FTP upload and retention were not run"

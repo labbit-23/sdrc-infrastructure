@@ -53,7 +53,8 @@ load_config() {
     [[ -r "$config_file" ]] || fatal "Configuration file is not readable: $config_file"
 
     # Required values must come from the selected config, not the environment.
-    unset BACKUP_NAME BACKUP_PATHS COMMAND_OUTPUTS
+    unset BACKUP_NAME BACKUP_PATHS COMMAND_OUTPUTS ENCRYPTION_ENABLED \
+        AGE_BINARY AGE_RECIPIENTS_FILE KEEP_UNENCRYPTED_ARCHIVE
 
     # Configurations are trusted Bash files so that they can define arrays.
     # shellcheck disable=SC1090
@@ -68,9 +69,18 @@ load_config() {
     : "${BACKUP_WORK_ROOT:=${BACKUP_BASE_DIR}/work}"
     : "${BACKUP_OUTPUT_DIR:=${BACKUP_BASE_DIR}/archives}"
     : "${KEEP_WORKDIR:=false}"
+    : "${ENCRYPTION_ENABLED:=false}"
+    : "${AGE_BINARY:=age}"
+    : "${AGE_RECIPIENTS_FILE:=}"
+    : "${KEEP_UNENCRYPTED_ARCHIVE:=false}"
 
     [[ "$BACKUP_NAME" =~ ^[A-Za-z0-9._-]+$ ]] || fatal "BACKUP_NAME contains unsafe characters"
     [[ "$KEEP_WORKDIR" == "true" || "$KEEP_WORKDIR" == "false" ]] || fatal "KEEP_WORKDIR must be true or false"
+    [[ "$ENCRYPTION_ENABLED" == "true" || "$ENCRYPTION_ENABLED" == "false" ]] \
+        || fatal "ENCRYPTION_ENABLED must be true or false"
+    [[ -n "$AGE_BINARY" ]] || fatal "AGE_BINARY must not be empty"
+    [[ "$KEEP_UNENCRYPTED_ARCHIVE" == "true" || "$KEEP_UNENCRYPTED_ARCHIVE" == "false" ]] \
+        || fatal "KEEP_UNENCRYPTED_ARCHIVE must be true or false"
     [[ "$BACKUP_WORK_ROOT" == /* ]] || fatal "BACKUP_WORK_ROOT must be an absolute path"
     [[ "$BACKUP_OUTPUT_DIR" == /* ]] || fatal "BACKUP_OUTPUT_DIR must be an absolute path"
 }

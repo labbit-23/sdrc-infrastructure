@@ -1,0 +1,39 @@
+# Logs
+*.log
+logs/
+!backup/logs/
+backup/logs/*
+!backup/logs/.gitkeep
+
+# Secrets and environment files
+secrets/
+*.secret
+.env
+.env.*
+backup/config/*.conf
+!backup/config/*.example.conf
+
+# Backup archives
+*.tar
+*.tar.gz
+*.tgz
+*.zst
+*.age
+*.zip
+*.bak
+*.backup
+
+# age and GPG keys
+*.agekey
+age-key.txt
+*.gpg
+*.pgp
+*.asc
+*.key
+
+# Temporary files
+*.tmp
+*.temp
+*.swp
+*~
+.cache/

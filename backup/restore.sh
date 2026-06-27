@@ -9,6 +9,8 @@ BACKUP_LOG_DIR="${SCRIPT_DIR}/logs"
 
 # shellcheck source=lib/common.sh
 source "${SCRIPT_DIR}/lib/common.sh"
+# shellcheck source=lib/archive.sh
+source "${SCRIPT_DIR}/lib/archive.sh"
 # shellcheck source=lib/encrypt.sh
 source "${SCRIPT_DIR}/lib/encrypt.sh"
 
@@ -50,10 +52,15 @@ if [[ -d "$RESTORE_DIR" && -n "$(find "$RESTORE_DIR" -mindepth 1 -maxdepth 1 -pr
     fatal "Restore directory must be empty: $RESTORE_DIR"
 fi
 
-RESTORE_WORK_DIR="$(mktemp -d "${TMPDIR:-/tmp}/${BACKUP_NAME}_restore_${RUN_TIMESTAMP}.XXXXXX")"
+RESTORE_WORK_DIR="${TMPDIR:-/tmp}/${BACKUP_NAME}_restore_${RUN_TIMESTAMP}.dry-run"
+if [[ "$DRY_RUN" != "true" ]]; then
+    RESTORE_WORK_DIR="$(mktemp -d "${TMPDIR:-/tmp}/${BACKUP_NAME}_restore_${RUN_TIMESTAMP}.XXXXXX")"
+fi
 cleanup() {
     local exit_code=$?
-    rm -rf -- "$RESTORE_WORK_DIR"
+    if [[ "$DRY_RUN" != "true" && -d "$RESTORE_WORK_DIR" ]]; then
+        rm -rf -- "$RESTORE_WORK_DIR"
+    fi
     if (( exit_code != 0 )); then
         warn "Restore failed with exit code $exit_code"
     fi
@@ -76,4 +83,3 @@ fi
 
 info "Restore extraction completed: $RESTORE_DIR"
 info "No data was written back to any live system"
-

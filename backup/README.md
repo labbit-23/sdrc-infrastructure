@@ -1,50 +1,42 @@
 # Backup
 
-Phase 1 provides a Bash framework for collecting files, capturing command output,
-dumping databases, compressing and encrypting the result, generating a checksum,
-uploading it to FTP, and applying retention rules.
+Phase 2 creates local, unencrypted backups. It copies configured paths into an
+isolated working directory, captures configured command output, compresses the
+result as `.tar.zst`, and writes a `.sha256` checksum.
 
-The configuration files are trusted Bash files. Copy an example outside version
-control, replace its placeholders, and keep credentials in environment variables
-or protected files rather than committing them.
+Archives and checksums are published only after their write completes. Failed
+runs remove `.partial` files and any incomplete archive/checksum output.
 
-## Backup
+Configuration files are trusted Bash files. The required settings are
+`BACKUP_NAME`, the indexed `BACKUP_PATHS` array, and the indexed
+`COMMAND_OUTPUTS` array. Copy an example to an ignored `*.conf` file before
+adapting it for a server.
 
-Preview all steps without collecting, encrypting, uploading, or deleting data:
+## Dry run
+
+From the repository root:
 
 ```bash
 ./backup/backup.sh backup/config/vps1.example.conf --dry-run
 ```
 
-Run a backup after supplying a valid age recipient and FTP credentials:
+A dry run validates configuration and reports planned actions. It does not copy
+paths, execute configured commands, create a working directory or archive, or
+generate a checksum. It writes only a log under `backup/logs/`.
+
+## Local backup
+
+Install `tar`, `zstd`, and `sha256sum`, then run:
 
 ```bash
-export FTP_PASSWORD='replace-at-runtime'
-./backup/backup.sh /secure/path/vps1.conf
+cp backup/config/vps1.example.conf backup/config/vps1.conf
+# Edit backup/config/vps1.conf for the host.
+./backup/backup.sh backup/config/vps1.conf
 ```
 
-Logs are written to `backup/logs/`. Generated archives are written to
-`backup/archives/` by default and are ignored by Git.
+Archives are written to `backup/archives/` by default. Encryption, FTP upload,
+retention, database capture/import, and writes back to source systems are not
+performed in Phase 2. Their libraries are placeholders only.
 
-## Restore
-
-Preview a restore:
-
-```bash
-./backup/restore.sh /secure/path/vps1.conf \
-  backup/archives/vps1_20260101T000000Z.tar.zst.age \
-  /tmp/sdrc-restore --dry-run
-```
-
-Verify the checksum, decrypt, and extract into a new or empty directory:
-
-```bash
-export AGE_IDENTITY_FILE='/secure/path/backup-identity.txt'
-./backup/restore.sh /secure/path/vps1.conf \
-  backup/archives/vps1_20260101T000000Z.tar.zst.age \
-  /tmp/sdrc-restore
-```
-
-Restore does not copy data back to a live system, import databases, or execute
-captured commands. Those destructive operations are intentionally out of scope.
-
+The restore script remains a future-phase scaffold and is not part of the Phase
+2 local backup flow.

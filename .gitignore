@@ -14,6 +14,7 @@ backup/config/*.conf
 !backup/config/*.example.conf
 
 # Backup archives
+backup/archives/
 *.tar
 *.tar.gz
 *.tgz

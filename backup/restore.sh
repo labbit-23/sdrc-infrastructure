@@ -5,6 +5,7 @@ umask 077
 # Restore from a local archive or an explicitly selected FTP backup.
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd -- "${SCRIPT_DIR}/.." && pwd)"
 BACKUP_BASE_DIR="$SCRIPT_DIR"
 BACKUP_LOG_DIR="${SCRIPT_DIR}/logs"
 
@@ -17,11 +18,32 @@ source "${SCRIPT_DIR}/lib/encrypt.sh"
 # shellcheck source=lib/upload_ftp.sh
 source "${SCRIPT_DIR}/lib/upload_ftp.sh"
 
-usage() {
-    printf 'Usage: %s CONFIG_FILE ARCHIVE_OR_REMOTE_FILENAME RESTORE_DIR [--ftp] [--force] [--dry-run]\n' "$0"
+PROGRAM_NAME="$(basename "$0")"
+REPOSITORY_VERSION="$(repository_version)"
+
+print_usage() {
+    printf '%s\n' \
+        "SDRC Infrastructure restore ${REPOSITORY_VERSION}" \
+        "" \
+        "Usage:" \
+        "  ${PROGRAM_NAME} CONFIG_FILE ARCHIVE_OR_REMOTE_FILENAME RESTORE_DIR [OPTIONS]" \
+        "" \
+        "Options:" \
+        "  --ftp           Download the archive and checksum from configured FTP storage." \
+        "  --force         Allow extraction into an existing restore directory." \
+        "  --dry-run       Validate and log planned actions without downloading or extracting." \
+        "  -h, --help      Show this help message and exit." \
+        "  -V, --version   Show the repository version and exit."
 }
 
-[[ $# -ge 3 ]] || { usage >&2; exit 2; }
+for argument in "$@"; do
+    case "$argument" in
+        -h|--help) print_usage; exit 0 ;;
+        -V|--version) printf '%s %s\n' "$PROGRAM_NAME" "$REPOSITORY_VERSION"; exit 0 ;;
+    esac
+done
+
+[[ $# -ge 3 ]] || { print_usage >&2; exit 2; }
 CONFIG_FILE="$1"
 SOURCE_ARCHIVE="$2"
 RESTORE_DIR="$3"
@@ -36,8 +58,7 @@ while (( $# > 0 )); do
         --ftp) FTP_SOURCE=true ;;
         --force) FORCE=true ;;
         --dry-run) DRY_RUN=true ;;
-        -h|--help) usage; exit 0 ;;
-        *) usage >&2; fatal "Unknown argument: $1" ;;
+        *) print_usage >&2; fatal "Unknown argument: $1" ;;
     esac
     shift
 done

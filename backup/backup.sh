@@ -2,9 +2,10 @@
 set -euo pipefail
 umask 077
 
-# Phase 3 local backup and optional encryption orchestration.
+# Local backup, optional age encryption, and optional FTP upload.
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd -- "${SCRIPT_DIR}/.." && pwd)"
 BACKUP_BASE_DIR="$SCRIPT_DIR"
 BACKUP_LOG_DIR="${SCRIPT_DIR}/logs"
 
@@ -17,11 +18,30 @@ source "${SCRIPT_DIR}/lib/encrypt.sh"
 # shellcheck source=lib/upload_ftp.sh
 source "${SCRIPT_DIR}/lib/upload_ftp.sh"
 
-usage() {
-    printf 'Usage: %s CONFIG_FILE [--dry-run]\n' "$0"
+PROGRAM_NAME="$(basename "$0")"
+REPOSITORY_VERSION="$(repository_version)"
+
+print_usage() {
+    printf '%s\n' \
+        "SDRC Infrastructure backup ${REPOSITORY_VERSION}" \
+        "" \
+        "Usage:" \
+        "  ${PROGRAM_NAME} CONFIG_FILE [OPTIONS]" \
+        "" \
+        "Options:" \
+        "  --dry-run       Validate and log planned actions without creating a backup." \
+        "  -h, --help      Show this help message and exit." \
+        "  -V, --version   Show the repository version and exit."
 }
 
-[[ $# -ge 1 ]] || { usage >&2; exit 2; }
+for argument in "$@"; do
+    case "$argument" in
+        -h|--help) print_usage; exit 0 ;;
+        -V|--version) printf '%s %s\n' "$PROGRAM_NAME" "$REPOSITORY_VERSION"; exit 0 ;;
+    esac
+done
+
+[[ $# -ge 1 ]] || { print_usage >&2; exit 2; }
 CONFIG_FILE="$1"
 shift
 DRY_RUN=false
@@ -29,8 +49,7 @@ DRY_RUN=false
 while (( $# > 0 )); do
     case "$1" in
         --dry-run) DRY_RUN=true ;;
-        -h|--help) usage; exit 0 ;;
-        *) usage >&2; fatal "Unknown argument: $1" ;;
+        *) print_usage >&2; fatal "Unknown argument: $1" ;;
     esac
     shift
 done
@@ -124,7 +143,7 @@ for command_output in "${COMMAND_OUTPUTS[@]}"; do
     SEEN_OUTPUT_NAMES["$output_name"]=1
 done
 
-info "Phase 5 backup started"
+info "Backup started"
 info "Backup name: $BACKUP_NAME"
 info "Configuration: $CONFIG_FILE"
 info "Dry run: $DRY_RUN"
@@ -232,4 +251,4 @@ else
     info "FTP upload is disabled"
 fi
 
-info "Phase 5 flow complete; remote retention was not run"
+info "Backup completed; remote retention is not implemented"

@@ -40,3 +40,10 @@ sdrc-backup-key.txt
 *.swp
 *~
 .cache/
+
+# Work directories
+backup/work/
+restore-test/
+
+# Environment-specific recipient files
+recipients.txt

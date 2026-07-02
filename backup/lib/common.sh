@@ -28,16 +28,10 @@ fatal() {
     exit 1
 }
 
-format_command() {
-    printf '%q ' "$@"
-}
-
-run_command() {
-    if [[ "${DRY_RUN:-false}" == "true" ]]; then
-        info "DRY RUN: $(format_command "$@")"
-        return 0
-    fi
-    "$@"
+repository_version() {
+    local version_file="${REPO_ROOT}/VERSION"
+    [[ -r "$version_file" ]] || fatal "Repository version file not found: $version_file"
+    printf '%s' "$(<"$version_file")"
 }
 
 require_command() {

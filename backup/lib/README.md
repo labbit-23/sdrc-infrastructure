@@ -1,7 +1,9 @@
 # Backup Libraries
 
-- `archive.sh` contains the active Phase 2 compression and checksum helpers.
-- `encrypt.sh` contains the optional Phase 3 age encryption helper.
+- `archive.sh` provides compression and checksum helpers.
+- `common.sh` provides logging, version lookup, and configuration validation.
+- `encrypt.sh` provides age encryption and decryption helpers.
 - `upload_ftp.sh` contains the optional `lftp` upload and restore-download helpers.
-- `database.sh` and `retention.sh` remain inert placeholders and are not
-  sourced by `backup.sh`.
+
+These files are sourced libraries, not standalone commands. The supported
+entrypoints are `backup/backup.sh` and `backup/restore.sh`.

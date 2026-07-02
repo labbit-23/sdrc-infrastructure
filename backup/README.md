@@ -1,104 +1,124 @@
-# Backup
+# Backup and Restore
 
-Phase 5 creates local backups with optional age encryption and Hostinger FTP
-upload. It copies configured paths into an
-isolated working directory, captures configured command output, compresses the
-result as `.tar.zst`, optionally encrypts it as `.tar.zst.age`, and writes a
-`.sha256` checksum for the final archive.
+The backup engine collects configured paths and diagnostic output, creates a
+compressed archive, optionally encrypts it, generates a checksum, and optionally
+uploads the final artifact to FTP. Restore performs the inverse operation in a
+staging directory and always verifies the checksum before decryption or
+extraction.
 
-Archives and checksums are published only after their write completes. Failed
-runs remove `.partial` files and any incomplete archive/checksum output.
+## Prerequisites
 
-Configuration files are trusted Bash files. The required settings are
-`BACKUP_NAME`, the indexed `BACKUP_PATHS` array, and the indexed
-`COMMAND_OUTPUTS` array. Copy an example to an ignored `*.conf` file before
-adapting it for a server.
+- Bash 4+
+- `tar`, `zstd`, and `sha256sum` for every backup and restore
+- `age` and `age-keygen` when encryption is enabled
+- `lftp` for FTP upload or download
 
-`COMMAND_OUTPUTS` are best-effort diagnostics by default. Their stdout and
-stderr are saved together in the requested text file. A non-zero exit status is
-logged as a warning and the backup continues. Set `COMMAND_OUTPUTS_FATAL=true`
-to abort on the first diagnostic failure. This setting affects only diagnostic
-commands; path collection, compression, encryption, and checksum failures are
-always fatal.
-
-Encryption is controlled by `ENCRYPTION_ENABLED`, `AGE_BINARY`,
-`AGE_RECIPIENTS_FILE`, and `KEEP_UNENCRYPTED_ARCHIVE`. `AGE_BINARY` defaults to
-`age` and may be set to an explicit test executable path. With encryption
-disabled, Phase 2 behavior is unchanged.
-
-## Dry run
-
-From the repository root:
-
-```bash
-./backup/backup.sh backup/config/vps1.example.conf --dry-run
-```
-
-A dry run validates configuration and reports planned actions. It does not copy
-paths, execute configured commands, create a working directory or archive, or
-generate a checksum. It writes only a log under `backup/logs/`.
-
-## Generate an age keypair
-
-Production validation requires the upstream `age` package:
+Install all supported dependencies on Debian or Ubuntu:
 
 ```bash
 sudo apt update
-sudo apt install -y age
+sudo apt install -y bash tar zstd coreutils age lftp
 ```
 
-On a secure administrative or restore system, create the protected directory
-and generate the identity and public recipient file:
+## Configuration
+
+Copy and edit one of the reviewed examples:
+
+```bash
+cp backup/config/vps1.example.conf backup/config/vps1.conf
+${EDITOR:-vi} backup/config/vps1.conf
+```
+
+Configuration files are trusted Bash and must be reviewed before use. The
+following values control the workflow:
+
+| Setting | Default | Purpose |
+| --- | --- | --- |
+| `BACKUP_NAME` | required | Safe label used in archive and log names |
+| `BACKUP_PATHS` | required array | Absolute paths copied into the archive |
+| `COMMAND_OUTPUTS` | required array | Read-only diagnostics as `file.txt\|command` |
+| `COMMAND_OUTPUTS_FATAL` | `false` | Abort when a diagnostic command fails |
+| `BACKUP_WORK_ROOT` | `backup/work` | Temporary staging directory |
+| `BACKUP_OUTPUT_DIR` | `backup/archives` | Local archive directory |
+| `KEEP_WORKDIR` | `false` | Preserve staging data for inspection |
+| `ENCRYPTION_ENABLED` | `false` | Encrypt the compressed archive with age |
+| `AGE_BINARY` | `age` | age executable name or test path |
+| `AGE_RECIPIENTS_FILE` | empty | Public recipients used for encryption |
+| `AGE_IDENTITY_FILE` | empty | Private identity used only during restore |
+| `KEEP_UNENCRYPTED_ARCHIVE` | `false` | Retain `.tar.zst` after encryption |
+| `FTP_ENABLED` | `false` | Upload backups after local creation |
+| `FTP_HOST` | empty | Hostinger FTP hostname or IPv4 address |
+| `FTP_PORT` | `21` | FTP port |
+| `FTP_USER` | empty | FTP account name |
+| `FTP_PASSWORD_ENV` | `SDRC_BACKUP_FTP_PASSWORD` | Environment variable containing the password |
+| `FTP_REMOTE_DIR` | `/backups` | Remote archive directory |
+| `FTP_SSL_VERIFY_CERT` | `true` | Verify the FTP/FTPS server certificate |
+
+Diagnostic commands are best-effort by default. Their combined stdout and
+stderr are saved even when they return non-zero. Path collection, compression,
+encryption, checksum, and FTP failures remain fatal.
+
+## Backup
+
+```bash
+./backup/backup.sh CONFIG_FILE [--dry-run]
+```
+
+Example:
+
+```bash
+./backup/backup.sh backup/config/vps1.conf --dry-run
+./backup/backup.sh backup/config/vps1.conf
+```
+
+Dry-run mode validates configuration and reports planned actions. It does not
+copy paths, run diagnostics, create workspaces or archives, encrypt, or contact
+FTP. It writes only its log under `backup/logs/`.
+
+Archives and checksums are built under `.partial` names and atomically renamed.
+Incomplete local outputs are removed after failure. When FTP is enabled, the
+checksum and final archive are also uploaded under remote `.partial` names and
+renamed after both transfers complete.
+
+## age encryption
+
+Generate the private identity on a protected administrative or restore system,
+not on the source VPS:
 
 ```bash
 mkdir -p ~/.config/sdrc-backup/age
 chmod 700 ~/.config/sdrc-backup/age
 age-keygen -o ~/.config/sdrc-backup/age/sdrc-backup-key.txt
-age-keygen -y ~/.config/sdrc-backup/age/sdrc-backup-key.txt > ~/.config/sdrc-backup/age/recipients.txt
+age-keygen -y ~/.config/sdrc-backup/age/sdrc-backup-key.txt \
+  > ~/.config/sdrc-backup/age/recipients.txt
 ```
 
-Keep `sdrc-backup-key.txt` offline or on a protected restore system. Never copy
-it into this repository or onto the source VPS. Copy only `recipients.txt` to
-the source server, for example:
+Keep `sdrc-backup-key.txt` offline or on the protected restore host. Copy only
+the public `recipients.txt` file to the source server, for example:
 
 ```text
 /etc/sdrc-backup/recipients/vps1.txt
 ```
 
-Restrict the directory from accidental modification. The recipient file is
-public and may contain multiple recipients, one per line.
-
-## Local backup
-
-Install `tar`, `zstd`, `sha256sum`, and `age` when encryption is enabled, then
-run:
+Configure the source host:
 
 ```bash
-cp backup/config/vps1.example.conf backup/config/vps1.conf
-# Edit backup/config/vps1.conf for the host.
-./backup/backup.sh backup/config/vps1.conf
+ENCRYPTION_ENABLED=true
+AGE_RECIPIENTS_FILE="/etc/sdrc-backup/recipients/vps1.txt"
+KEEP_UNENCRYPTED_ARCHIVE=false
 ```
 
-Set `ENCRYPTION_ENABLED=true` and point `AGE_RECIPIENTS_FILE` at the public
-recipient file to create an encrypted archive. When
-`KEEP_UNENCRYPTED_ARCHIVE=false`, the `.tar.zst` file is removed only after the
-encrypted archive and its checksum are successfully published.
-
-Archives are written to `backup/archives/` by default. Remote retention,
-database capture/import, and writes back to source systems are not performed;
-those libraries remain placeholders only.
-
-## Hostinger FTP upload
-
-Install `lftp`:
+Configure the protected restore host separately:
 
 ```bash
-sudo apt update
-sudo apt install -y lftp
+AGE_IDENTITY_FILE="$HOME/.config/sdrc-backup/age/sdrc-backup-key.txt"
 ```
 
-FTP is disabled by default. Copy an example config and set the Hostinger FTP
-host, port, user, and remote directory without adding a password:
+Never commit an age private identity.
+
+## Hostinger FTP
+
+FTP is disabled by default. Configure connection metadata without a password:
 
 ```bash
 FTP_ENABLED=true
@@ -110,69 +130,61 @@ FTP_REMOTE_DIR="/backups"
 FTP_SSL_VERIFY_CERT=true
 ```
 
-Only set `FTP_SSL_VERIFY_CERT=false` when using encrypted archives, because
-FTP/FTPS transport trust is weakened.
-
-Export the password only in the process environment, then run the backup:
+Provide the password only through the named environment variable:
 
 ```bash
 export SDRC_BACKUP_FTP_PASSWORD='set-at-runtime'
-./backup/backup.sh backup/config/vps1.conf --dry-run
 ./backup/backup.sh backup/config/vps1.conf
 unset SDRC_BACKUP_FTP_PASSWORD
 ```
 
-The final archive and matching checksum upload under `.partial` names. The
-checksum is renamed first and the archive second, so the final archive name
-marks a completed pair. Upload failure is fatal but does not delete the valid
-local backup. Remote retention is not implemented.
+Only set `FTP_SSL_VERIFY_CERT=false` when using encrypted archives, because
+FTP/FTPS transport trust is weakened. Standard FTP also exposes credentials in
+transit; use a dedicated account and prefer encrypted archives.
 
-Hostinger's standard FTP service uses port 21. Standard FTP does not provide
-the transport security of SFTP, so use a dedicated account and enable age
-encryption for backup contents.
+Remote retention is not implemented.
 
-## Automated restore
-
-On the protected restore host, copy the server config and set the private
-identity path without committing it:
+## Restore
 
 ```bash
-AGE_IDENTITY_FILE="$HOME/.config/sdrc-backup/age/sdrc-backup-key.txt"
+./backup/restore.sh CONFIG_FILE ARCHIVE_OR_REMOTE_FILENAME RESTORE_DIR [OPTIONS]
 ```
 
 Restore an existing local archive and adjacent `.sha256` file:
 
 ```bash
 ./backup/restore.sh backup/config/vps1.conf \
-  /secure/backups/vps1_20260101T000000Z.tar.zst.age \
+  /secure/backups/vps1_TIMESTAMP.tar.zst.age \
   /tmp/vps1-restore
 ```
 
-Download the archive and checksum from FTP before restoring:
+Download the archive and checksum from FTP first:
 
 ```bash
 export SDRC_BACKUP_FTP_PASSWORD='set-at-runtime'
 ./backup/restore.sh backup/config/vps1.conf \
-  vps1_20260101T000000Z.tar.zst.age \
+  vps1_TIMESTAMP.tar.zst.age \
   /tmp/vps1-restore --ftp
 unset SDRC_BACKUP_FTP_PASSWORD
 ```
 
-Add `--dry-run` to preview without downloading, decrypting, creating the restore
-directory, or extracting. An existing restore directory is rejected unless
-`--force` is supplied; force permits extraction into that directory but does
-not delete it first.
+Restore options:
+
+- `--ftp` treats the source as a filename under `FTP_REMOTE_DIR`.
+- `--dry-run` performs validation and logging without downloading or extracting.
+- `--force` permits extraction into an existing directory without deleting it.
+
+Without `--force`, the restore directory must not already exist. The filesystem
+root is never accepted as a restore destination.
 
 ## Manual restore equivalent
 
-The following is the exact manual sequence automated by `restore.sh`. Replace
-the example host, user, filename, and paths with values from the protected
-restore environment:
+This is the manual equivalent of an encrypted FTP restore:
 
 ```bash
 export SDRC_BACKUP_FTP_PASSWORD='set-at-runtime'
 work="$(mktemp -d)"
-archive="vps1_20260101T000000Z.tar.zst.age"
+archive="vps1_TIMESTAMP.tar.zst.age"
 
 LFTP_PASSWORD="$SDRC_BACKUP_FTP_PASSWORD" lftp --norc <<LFTP_COMMANDS
 set cmd:fail-exit yes
@@ -190,9 +202,17 @@ age --decrypt \
   --output "$work/${archive%.age}" "$work/$archive"
 mkdir /tmp/vps1-restore
 zstd -q -d -c "$work/${archive%.age}" | tar -C /tmp/vps1-restore -xf -
-
 unset SDRC_BACKUP_FTP_PASSWORD
 ```
 
-If `FTP_SSL_VERIFY_CERT=false` is intentionally required, the equivalent manual
-`lftp` session also includes `set ssl:verify-certificate no`.
+If certificate verification is intentionally disabled, add
+`set ssl:verify-certificate no` to the `lftp` session.
+
+## Command reference
+
+```bash
+./backup/backup.sh --help
+./backup/restore.sh --help
+./backup/backup.sh --version
+./backup/restore.sh --version
+```

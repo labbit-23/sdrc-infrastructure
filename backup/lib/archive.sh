@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-# Phase 2 tar/zstd archive and SHA-256 checksum helpers.
+# tar/zstd archive and SHA-256 checksum helpers.
 
 compress_archive() {
     local source_dir="$1"
@@ -47,4 +47,3 @@ verify_checksum() {
     [[ -f "$checksum_file" ]] || fatal "Checksum file not found: $checksum_file"
     (cd "$archive_dir" && sha256sum --check "$checksum_name")
 }
-

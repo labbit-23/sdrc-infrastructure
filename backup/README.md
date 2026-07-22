@@ -144,6 +144,63 @@ transit; use a dedicated account and prefer encrypted archives.
 
 Remote retention is not implemented.
 
+## Local retention
+
+Disabled by default. When `RETENTION_ENABLED=true`, a successful (non
+dry-run) backup prunes older archives from `BACKUP_OUTPUT_DIR` after it
+completes:
+
+```bash
+RETENTION_ENABLED=true
+RETENTION_DAILY_DAYS=14    # keep every archive for this many days
+RETENTION_WEEKLY_DAYS=84   # keep the RETENTION_WEEKLY_DOW archive this long
+RETENTION_WEEKLY_DOW=7     # 1=Monday .. 7=Sunday
+```
+
+Pruning reads the run timestamp out of each archive's filename (not mtime),
+so copying archives elsewhere never confuses it. This is the "weekly full,
+daily incremental" pattern applied to an engine that only ever produces full
+archives: for a small database (see `config/vps2-labit-core.example.conf`,
+a schema-scoped Postgres dump), running the *same full backup* daily is
+cheaper and far simpler to restore than true incremental/WAL-based backups,
+and retention just keeps dailies for a short window and one day per week for
+longer.
+
+## Pulling a remote Postgres schema (pg_dump over SSH)
+
+`config/vps2-labit-core.example.conf` and `scripts/pg_dump_labit_core.sh`
+are a worked example of backing up a schema that lives on a different host
+than the one running `backup.sh`. Unlike `BACKUP_PATHS`/most
+`COMMAND_OUTPUTS` entries (which read local files/commands), this pattern
+puts a small wrapper script in `COMMAND_OUTPUTS` whose job is to SSH out,
+run `pg_dump` inside the remote Docker container, and stream plain-SQL
+output back to stdout — `backup.sh` captures it like any other diagnostic
+command, then zstd-compresses the whole archive. Run this from the devserver
+or any LAN host with SSH access to the database host, never from the
+database host itself. See the wrapper script's header comment for the
+required `LABIT_PG_BACKUP_PASSWORD` environment variable (never stored in
+the config file, fetched fresh from the source host per run) and for
+overriding the container/schema/DB for other Postgres backups following the
+same pattern.
+
+## Scheduling on the devserver (or any LAN host)
+
+Nothing in this repo installs a cron job — that step is deliberately manual
+per host. A daily run at 02:00 local time, with the Postgres password
+supplied only to that invocation:
+
+```cron
+0 2 * * * LABIT_PG_BACKUP_PASSWORD="$(ssh root@supabase.sdrc.in "grep '^POSTGRES_PASSWORD=' /opt/supabase/docker/.env | cut -d= -f2-")" \
+    /home/sdrc/projects/sdrc-infrastructure/backup/backup.sh \
+    /home/sdrc/projects/sdrc-infrastructure/backup/config/vps2-labit-core.conf \
+    >> /home/sdrc/projects/sdrc-infrastructure/backup/logs/cron-vps2-labit-core.log 2>&1
+```
+
+Requires the running host's SSH key to already be authorized for
+non-interactive (`BatchMode=yes`) access to `root@supabase.sdrc.in` — verify
+with `ssh -o BatchMode=yes root@supabase.sdrc.in true` before relying on cron
+to run it unattended.
+
 ## Restore
 
 ```bash

@@ -49,7 +49,8 @@ load_config() {
     # Required values must come from the selected config, not the environment.
     unset BACKUP_NAME BACKUP_PATHS COMMAND_OUTPUTS COMMAND_OUTPUTS_FATAL ENCRYPTION_ENABLED \
         AGE_BINARY AGE_RECIPIENTS_FILE AGE_IDENTITY_FILE KEEP_UNENCRYPTED_ARCHIVE FTP_ENABLED \
-        FTP_HOST FTP_PORT FTP_USER FTP_PASSWORD_ENV FTP_REMOTE_DIR FTP_SSL_VERIFY_CERT
+        FTP_HOST FTP_PORT FTP_USER FTP_PASSWORD_ENV FTP_REMOTE_DIR FTP_SSL_VERIFY_CERT \
+        RETENTION_ENABLED RETENTION_DAILY_DAYS RETENTION_WEEKLY_DAYS RETENTION_WEEKLY_DOW
 
     # Configurations are trusted Bash files so that they can define arrays.
     # shellcheck disable=SC1090
@@ -77,6 +78,10 @@ load_config() {
     : "${FTP_PASSWORD_ENV:=SDRC_BACKUP_FTP_PASSWORD}"
     : "${FTP_REMOTE_DIR:=/backups}"
     : "${FTP_SSL_VERIFY_CERT:=true}"
+    : "${RETENTION_ENABLED:=false}"
+    : "${RETENTION_DAILY_DAYS:=14}"
+    : "${RETENTION_WEEKLY_DAYS:=84}"
+    : "${RETENTION_WEEKLY_DOW:=7}"
 
     [[ "$BACKUP_NAME" =~ ^[A-Za-z0-9._-]+$ ]] || fatal "BACKUP_NAME contains unsafe characters"
     [[ "$KEEP_WORKDIR" == "true" || "$KEEP_WORKDIR" == "false" ]] || fatal "KEEP_WORKDIR must be true or false"
@@ -101,6 +106,7 @@ load_config() {
     if [[ "$FTP_ENABLED" == "true" ]]; then
         validate_ftp_connection_config
     fi
+    validate_retention_config
     [[ "$BACKUP_WORK_ROOT" == /* ]] || fatal "BACKUP_WORK_ROOT must be an absolute path"
     [[ "$BACKUP_OUTPUT_DIR" == /* ]] || fatal "BACKUP_OUTPUT_DIR must be an absolute path"
 }

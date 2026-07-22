@@ -17,6 +17,8 @@ source "${SCRIPT_DIR}/lib/archive.sh"
 source "${SCRIPT_DIR}/lib/encrypt.sh"
 # shellcheck source=lib/upload_ftp.sh
 source "${SCRIPT_DIR}/lib/upload_ftp.sh"
+# shellcheck source=lib/retention.sh
+source "${SCRIPT_DIR}/lib/retention.sh"
 
 PROGRAM_NAME="$(basename "$0")"
 REPOSITORY_VERSION="$(repository_version)"

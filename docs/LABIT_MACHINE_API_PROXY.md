@@ -11,16 +11,16 @@ GET  https://labit.sdrc.in/machine-api/orders/{barcode}
 POST https://labit.sdrc.in/machine-api/inbox
 ```
 
-Internal destinations:
+Internal framework destinations:
 
 ```text
-GET  http://127.0.0.1:8001/api/results/machine-orders/{barcode}
-POST http://127.0.0.1:8001/api/results/machine-inbox
+GET  http://127.0.0.1:8001/api/framework/machine_order_lookup?barcode={barcode}
+POST http://127.0.0.1:8001/api/framework/machine_result_ingest
 ```
 
-The proxy preserves the Mirth `Authorization: Basic ...` header. It forwards
-no other Core routes under `/machine-api`; order lookup is GET-only and inbox
-submission is POST-only.
+The proxy preserves `X-Api-Key-Id` and `X-Api-Secret`. It forwards no other
+Core routes under `/machine-api`; order lookup is GET-only and inbox submission
+is POST-only.
 
 The source template is `deploy/nginx/labit-ui`. Deploy it only after checking
 the existing certificate paths and running:

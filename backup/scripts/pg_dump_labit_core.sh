@@ -41,7 +41,14 @@ SCHEMA="${LABIT_PG_BACKUP_SCHEMA:-labit_core}"
 [[ -n "${LABIT_PG_BACKUP_PASSWORD:-}" ]] \
     || { echo "LABIT_PG_BACKUP_PASSWORD is not set; see this script's header." >&2; exit 1; }
 
-remote_cmd=$(printf 'docker exec -e PGPASSWORD=%q %q pg_dump -U %q -d %q -n %q --no-owner --no-privileges -Fp' \
-    "$LABIT_PG_BACKUP_PASSWORD" "$CONTAINER" "$PG_USER" "$PG_DB" "$SCHEMA")
+# Password travels over the SSH-encrypted stdin channel only, never as a
+# `docker exec -e KEY=VALUE` argv -- `docker exec -e` puts the value in
+# plaintext in `ps aux` output on the container host (found live,
+# 2026-09-03: visible to any local shell user, and briefly surfaced in an
+# agent's own tool output/transcript capturing that `ps aux`). The remote
+# side reads one line from its own stdin into PGPASSWORD before exec'ing
+# pg_dump, so the value never appears in any process listing anywhere.
+remote_cmd=$(printf 'docker exec -i %q sh -c '\''read -r PGPASSWORD && export PGPASSWORD && exec pg_dump -U %q -d %q -n %q --no-owner --no-privileges -Fp'\''' \
+    "$CONTAINER" "$PG_USER" "$PG_DB" "$SCHEMA")
 
-exec ssh -o BatchMode=yes -o ConnectTimeout=10 "$SSH_HOST" "$remote_cmd"
+ssh -o BatchMode=yes -o ConnectTimeout=10 "$SSH_HOST" "$remote_cmd" <<< "$LABIT_PG_BACKUP_PASSWORD"

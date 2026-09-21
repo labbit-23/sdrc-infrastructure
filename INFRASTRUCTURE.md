@@ -24,6 +24,7 @@ Detailed inventories:
 
 - [VPS1 application server](inventory/vps1.md)
 - [VPS2 Supabase/database and applications](inventory/vps2.md)
+- [Ctrl-S legacy Shivam server](inventory/ctrls-legacy-shivam.md)
 - [Orthanc/DICOM discovery record](inventory/orthanc-dicom.md)
 - [Inventory coverage and unknown systems](inventory/README.md)
 - [Service relationships](architecture/services.md)
@@ -74,3 +75,5 @@ backups.
 - Recorded evidence and gaps in the existing daily schema dumps.
 - Added atomic, checksum-verified publication to a user-supplied sync folder.
 - Added an Orthanc/DICOM discovery questionnaire and install/restore runbook.
+- Audited the Ctrl-S Windows/Oracle/Tomcat server and recorded its residual
+  Patient App, MD app and automated API dependencies as decommissioning gates.

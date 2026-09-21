@@ -24,11 +24,13 @@ Detailed inventories:
 
 - [VPS1 application server](inventory/vps1.md)
 - [VPS2 Supabase/database and applications](inventory/vps2.md)
+- [Local report-delivery/application server](inventory/sdrc-report-delivery.md)
 - [Ctrl-S legacy Shivam server](inventory/ctrls-legacy-shivam.md)
 - [Orthanc/DICOM discovery record](inventory/orthanc-dicom.md)
 - [Inventory coverage and unknown systems](inventory/README.md)
 - [Service relationships](architecture/services.md)
 - [Network discovery record](architecture/network.md)
+- [Attendance migration and ERPNext retirement](runbooks/attendance-erpnext-migration.md)
 
 ## Backup status
 
@@ -77,3 +79,7 @@ backups.
 - Added an Orthanc/DICOM discovery questionnaire and install/restore runbook.
 - Audited the Ctrl-S Windows/Oracle/Tomcat server and recorded its residual
   Patient App, MD app and automated API dependencies as decommissioning gates.
+- Inventoried the local `sdrc-report-delivery` host, its four Next.js listeners,
+  database tunnel, backup schedules, remote access and current operational gaps.
+- Recorded the decision path for native attendance and eventual ERPNext
+  retirement, including parallel reconciliation and archival gates.

@@ -1,11 +1,12 @@
 # SDRC Infrastructure
 
-SDRC Infrastructure is SDRC's infrastructure automation and disaster recovery
-toolkit. The current release provides configurable local backups, optional age
-encryption, Hostinger FTP transfer, checksum verification, and safe extraction
+SDRC Infrastructure is SDRC's private infrastructure inventory, automation and
+disaster-recovery toolkit. Start with [`INFRASTRUCTURE.md`](INFRASTRUCTURE.md).
+The backup engine provides configurable local backups, optional age encryption,
+FTP transfer, checksum verification, sync-folder publication, and safe extraction
 into a dedicated restore directory.
 
-Current version: **1.0.0**. The canonical version is stored in [`VERSION`](VERSION).
+Current version: **1.1.0**. The canonical version is stored in [`VERSION`](VERSION).
 
 ## Scope
 
@@ -15,8 +16,8 @@ The repository is intended to support:
 - future Nextcloud and Collabora deployments
 - local Mirth, DEXA, and Orthanc systems
 
-Only the backup and restore workflow is implemented today. Infrastructure
-inventory, monitoring, and CTO dashboard integration remain roadmap items.
+Cloud inventory and operational runbooks are now present; local infrastructure,
+network topology and complete recovery coverage remain active discovery work.
 
 ## Capabilities
 
@@ -25,12 +26,14 @@ inventory, monitoring, and CTO dashboard integration remain roadmap items.
 - Create atomic `.tar.zst` archives and SHA-256 checksum files.
 - Optionally encrypt archives for one or more age recipients.
 - Optionally upload or download backups through Hostinger FTP using `lftp`.
+- Optionally publish completed backups into a Google Drive/other local sync folder.
 - Verify checksums before decryption and extraction.
 - Refuse to extract into an existing directory unless explicitly forced.
 - Preview backup and restore operations with `--dry-run`.
 
-Database dumps, remote retention, service reconfiguration, and database imports
-are intentionally not implemented.
+The generic engine can capture database dumps through reviewed wrapper commands,
+but database imports, remote retention and service reconfiguration are not
+automated.
 
 ## Prerequisites
 
@@ -109,8 +112,11 @@ and restore procedures.
 ## Repository layout
 
 - `backup/` — backup/restore entrypoints, libraries, examples, logs, and output
-- `docs/` — architecture and operational documentation
-- `inventory/` — future infrastructure inventory definitions
+- `INFRASTRUCTURE.md` — infrastructure entry point and current status
+- `inventory/` — per-system records and discovery templates
+- `architecture/` — network and service relationships
+- `runbooks/` — backup, restore, upgrade and service procedures
+- `docs/` — supporting technical documentation
 - `monitoring/` — future monitoring configuration
 - `scripts/` — future operational scripts
 
@@ -127,7 +133,7 @@ release; both command entrypoints report this value through `--version`.
 - Remote retention policies
 - Database-native backup and restore workflows
 - Automated restore validation
-- Infrastructure inventory and monitoring
+- Complete local infrastructure/network inventory and monitoring
 - CTO dashboard integration
 
 ## License

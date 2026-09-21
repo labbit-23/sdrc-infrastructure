@@ -53,6 +53,8 @@ following values control the workflow:
 | `FTP_PASSWORD_ENV` | `SDRC_BACKUP_FTP_PASSWORD` | Environment variable containing the password |
 | `FTP_REMOTE_DIR` | `/backups` | Remote archive directory |
 | `FTP_SSL_VERIFY_CERT` | `true` | Verify the FTP/FTPS server certificate |
+| `SYNC_FOLDER_ENABLED` | `false` | Publish the completed archive/checksum to a local sync folder |
+| `SYNC_FOLDER_DIR` | empty | Absolute Google Drive/other synchronized directory |
 
 Diagnostic commands are best-effort by default. Their combined stdout and
 stderr are saved even when they return non-zero. Path collection, compression,
@@ -143,6 +145,15 @@ FTP/FTPS transport trust is weakened. Standard FTP also exposes credentials in
 transit; use a dedicated account and prefer encrypted archives.
 
 Remote retention is not implemented.
+
+## Google Drive or other sync folder
+
+Set `SYNC_FOLDER_ENABLED=true` and point `SYNC_FOLDER_DIR` at an absolute folder
+already managed by a desktop sync client. The engine copies the final archive
+and checksum under `.partial` names, atomically renames them, and verifies the
+copied checksum. It does not configure the sync client or prove cloud upload.
+Use age encryption before placing production backups in a cloud-synchronized
+folder. See [`../runbooks/google-drive-backups.md`](../runbooks/google-drive-backups.md).
 
 ## Local retention
 

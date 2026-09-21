@@ -17,6 +17,8 @@ source "${SCRIPT_DIR}/lib/archive.sh"
 source "${SCRIPT_DIR}/lib/encrypt.sh"
 # shellcheck source=lib/upload_ftp.sh
 source "${SCRIPT_DIR}/lib/upload_ftp.sh"
+# shellcheck source=lib/sync_folder.sh
+source "${SCRIPT_DIR}/lib/sync_folder.sh"
 # shellcheck source=lib/retention.sh
 source "${SCRIPT_DIR}/lib/retention.sh"
 
@@ -156,6 +158,7 @@ info "Configured command outputs: ${#COMMAND_OUTPUTS[@]}"
 info "Diagnostic command failures are fatal: $COMMAND_OUTPUTS_FATAL"
 info "Encryption enabled: $ENCRYPTION_ENABLED"
 info "FTP upload enabled: $FTP_ENABLED"
+info "Sync-folder publication enabled: $SYNC_FOLDER_ENABLED"
 info "Local retention pruning enabled: $RETENTION_ENABLED"
 if [[ "$ENCRYPTION_ENABLED" == "true" ]]; then
     info "Age recipients file: $AGE_RECIPIENTS_FILE"
@@ -253,6 +256,8 @@ if [[ "$FTP_ENABLED" == "true" ]]; then
 else
     info "FTP upload is disabled"
 fi
+
+publish_to_sync_folder "$FINAL_ARCHIVE"
 
 prune_local_archives
 

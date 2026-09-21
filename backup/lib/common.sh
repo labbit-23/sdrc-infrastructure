@@ -50,6 +50,7 @@ load_config() {
     unset BACKUP_NAME BACKUP_PATHS COMMAND_OUTPUTS COMMAND_OUTPUTS_FATAL ENCRYPTION_ENABLED \
         AGE_BINARY AGE_RECIPIENTS_FILE AGE_IDENTITY_FILE KEEP_UNENCRYPTED_ARCHIVE FTP_ENABLED \
         FTP_HOST FTP_PORT FTP_USER FTP_PASSWORD_ENV FTP_REMOTE_DIR FTP_SSL_VERIFY_CERT \
+        SYNC_FOLDER_ENABLED SYNC_FOLDER_DIR \
         RETENTION_ENABLED RETENTION_DAILY_DAYS RETENTION_WEEKLY_DAYS RETENTION_WEEKLY_DOW
 
     # Configurations are trusted Bash files so that they can define arrays.
@@ -78,6 +79,8 @@ load_config() {
     : "${FTP_PASSWORD_ENV:=SDRC_BACKUP_FTP_PASSWORD}"
     : "${FTP_REMOTE_DIR:=/backups}"
     : "${FTP_SSL_VERIFY_CERT:=true}"
+    : "${SYNC_FOLDER_ENABLED:=false}"
+    : "${SYNC_FOLDER_DIR:=}"
     : "${RETENTION_ENABLED:=false}"
     : "${RETENTION_DAILY_DAYS:=14}"
     : "${RETENTION_WEEKLY_DAYS:=84}"
@@ -96,6 +99,12 @@ load_config() {
         || fatal "FTP_ENABLED must be true or false"
     [[ "$FTP_SSL_VERIFY_CERT" == "true" || "$FTP_SSL_VERIFY_CERT" == "false" ]] \
         || fatal "FTP_SSL_VERIFY_CERT must be true or false"
+    [[ "$SYNC_FOLDER_ENABLED" == "true" || "$SYNC_FOLDER_ENABLED" == "false" ]] \
+        || fatal "SYNC_FOLDER_ENABLED must be true or false"
+    if [[ "$SYNC_FOLDER_ENABLED" == "true" ]]; then
+        [[ "$SYNC_FOLDER_DIR" == /* ]] || fatal "SYNC_FOLDER_DIR must be an absolute path"
+        [[ "$SYNC_FOLDER_DIR" != "/" ]] || fatal "SYNC_FOLDER_DIR must not be the filesystem root"
+    fi
     [[ "$FTP_PORT" =~ ^[0-9]+$ ]] && (( 10#$FTP_PORT >= 1 && 10#$FTP_PORT <= 65535 )) \
         || fatal "FTP_PORT must be an integer from 1 to 65535"
     [[ "$FTP_PASSWORD_ENV" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]] \

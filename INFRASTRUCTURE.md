@@ -83,3 +83,13 @@ backups.
   database tunnel, backup schedules, remote access and current operational gaps.
 - Recorded the decision path for native attendance and eventual ERPNext
   retirement, including parallel reconciliation and archival gates.
+
+### 2026-09-22
+
+- Diagnosed the ERPNext `ModuleNotFoundError`: the deprecated Frappe
+  `labit_core` package was removed from disk/configuration but remains registered
+  in `tabInstalled Applications`; documented the maintenance-window cleanup
+  prerequisites without changing production.
+- Recorded the 49-row employee source inventory (33 biometric IDs, 16 missing),
+  the ZK check-in gap since 16 September, and the target native Core attendance
+  boundary. The PII-bearing CSV remains off-repository.

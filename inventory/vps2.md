@@ -1,6 +1,6 @@
 # VPS2 — Supabase, PostgreSQL, and host applications
 
-Last reviewed: 21 September 2026
+Last reviewed: 25 September 2026
 
 - Hostname: `ubuntu-4gb-hel1-2`
 - Provider: Hetzner
@@ -62,7 +62,7 @@ PM2 independently. Run `systemctl --failed`, `pm2 status`, and
   location, repository/revision, startup behavior, logs, dependencies and owner.
 - TODO: VERIFY all Supabase schemas, Storage object backing path, roles/global
   objects, extensions, auth dependencies, secrets recovery, and complete backup.
-- TODO: record CPU/RAM/disk, addressing, DNS/firewall, monitoring and alerts.
+- TODO: record addressing, DNS/firewall, monitoring and alerts.
 - A host snapshot is supplementary only; keep logical dumps and test restores.
 
 ## Database maintenance notes (2026-09-25)
@@ -88,3 +88,30 @@ PM2 independently. Run `systemctl --failed`, `pm2 status`, and
   `SELECT, DELETE` on `cto_service_logs` and `SELECT, INSERT, UPDATE` on
   `cto_service_daily_digest`, with matching RLS policies (`cto_digest_*`),
   because both tables are RLS-enabled with no other policies.
+
+## Capacity and PostgreSQL memory (checked 2026-09-25)
+
+The host was resized in September (hostname still says `4gb`): **4 cores, 7.6 GiB
+RAM, 4 GB swap, 150 GB disk (42% used)**. The host rebooted and PostgreSQL
+restarted on 2026-09-21 03:38.
+
+- PostgreSQL scaled itself to the new RAM at start-up; there is no manual
+  tuning in the compose files or `/etc/postgresql-custom` (only `supautils` and
+  replication files): `shared_buffers` 1.9 GB (25%), `effective_cache_size`
+  5 GB, `maintenance_work_mem` 256 MB, `work_mem` 16 MB, `wal_buffers` 20 MB,
+  `max_connections` 100 (35 in use), `max_wal_size` 1 GB. Buffer cache hit rate
+  99.2%. Containers have no memory limits; `shm_size` is Docker's 64 MB default.
+- Sorts and hash joins were spilling to disk: 9,864 temp files / 198 GB
+  (roughly six months of statistics; `pg_stat_statements` reset 2026-03-26).
+  Top writers: `labit_core_rw` 48%, `service_role` (PostgREST) 32%,
+  `supabase_admin` 18%.
+- **Change 2026-09-25:** `ALTER ROLE labit_core_rw SET work_mem = '64MB'`
+  (alongside its existing `idle_in_transaction_session_timeout=5min`; 11
+  connections at the time). Applies to new sessions only, so labit-core's pooled
+  connections pick it up when they recycle or the service restarts. Same
+  pattern as `shivam_archive_ro`, which already had `work_mem=32MB`. Revert with
+  `ALTER ROLE labit_core_rw RESET work_mem`.
+- Not changed, optional: the same setting for `service_role` (32% of spills);
+  `shm_size` to ~1 GB at the next container recreation (no `shm` errors in 7
+  days); `log_temp_files` to identify the spilling queries.
+

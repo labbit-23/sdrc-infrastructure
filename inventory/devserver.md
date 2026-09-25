@@ -1,11 +1,11 @@
-# SDRC report-delivery / local application server
+# devserver / local application server
 
 Last reviewed: 21 September 2026
 Status: active local application, development and backup host
 
 ## Identity and capacity
 
-- Hostname: `sdrc-report-delivery`
+- Hostname: `devserver`
 - Location/owner: local SDRC premises (exact room and hardware owner TODO: VERIFY)
 - Hardware: Intel desktop-class system, Core i3-4130, 2 cores/4 threads
 - OS: Ubuntu 24.04.5 LTS, x86-64

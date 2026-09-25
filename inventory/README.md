@@ -1,7 +1,7 @@
 # Infrastructure inventory
 
 Inventoried: [VPS1](vps1.md), [VPS2](vps2.md), the
-[local report-delivery/application host](sdrc-report-delivery.md), the
+[local devserver/application host](devserver.md), the
 [Ctrl-S legacy Shivam server](ctrls-legacy-shivam.md), and an initial
 [Orthanc/DICOM discovery record](orthanc-dicom.md).
 

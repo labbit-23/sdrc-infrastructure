@@ -24,7 +24,7 @@ Detailed inventories:
 
 - [VPS1 application server](inventory/vps1.md)
 - [VPS2 Supabase/database and applications](inventory/vps2.md)
-- [Local report-delivery/application server](inventory/sdrc-report-delivery.md)
+- [Local devserver/application server](inventory/devserver.md)
 - [Ctrl-S legacy Shivam server](inventory/ctrls-legacy-shivam.md)
 - [Orthanc/DICOM discovery record](inventory/orthanc-dicom.md)
 - [Inventory coverage and unknown systems](inventory/README.md)

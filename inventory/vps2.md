@@ -111,7 +111,16 @@ restarted on 2026-09-21 03:38.
   connections pick it up when they recycle or the service restarts. Same
   pattern as `shivam_archive_ro`, which already had `work_mem=32MB`. Revert with
   `ALTER ROLE labit_core_rw RESET work_mem`.
-- Not changed, optional: the same setting for `service_role` (32% of spills);
-  `shm_size` to ~1 GB at the next container recreation (no `shm` errors in 7
+- **Change 2026-09-25:** `ALTER ROLE service_role SET work_mem = '64MB'`. The
+  `service_role` spills (about 12 GB) are two paged reads of
+  `public.whatsapp_messages` (filter and sort on `created_at`, `LIMIT/OFFSET`)
+  issued through PostgREST by the API layer (`labbit-frontend`, `report_sender`
+  and enqueue workers use the service key). PostgREST applies per-role settings
+  to the impersonated role, the same mechanism Supabase's `anon`/`authenticated`
+  statement timeouts rely on. Baseline before the change: 12 GB of temp
+  writes; re-check `pg_stat_statements` later to confirm it slowed. Revert with
+  `ALTER ROLE service_role RESET work_mem`. A better fix is an index on
+  `whatsapp_messages (created_at)` (not created yet).
+- Not changed, optional: `shm_size` to ~1 GB at the next container recreation (no `shm` errors in 7
   days); `log_temp_files` to identify the spilling queries.
 

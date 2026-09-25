@@ -162,7 +162,7 @@ restarted on 2026-09-21 03:38.
 | Job | Schedule (UTC) | State | What |
 | --- | --- | --- | --- |
 | 1 `system_stats_snapshot_daily` | `30 18 * * *` | active | inserts into `labit_core.system_stats_snapshot` (from labit-core `schema/326`) |
-| 2 (unnamed) | `45 18 * * *` | **unscheduled 2026-09-25** | `DELETE FROM labit_core.audit_log WHERE changed_at < now() - interval '14 days'` (from labit-core `schema/393_audit_log_retention.sql`) |
+| 2 `audit_log_retention_prune` | `45 18 * * *` | **unscheduled 2026-09-25** | `DELETE FROM labit_core.audit_log WHERE changed_at < now() - interval '14 days'` (from labit-core `schema/393_audit_log_retention.sql`) |
 
 Job 2 ran nightly from 2026-09-03 and deleted 7,130,332 rows in 22 recorded
 runs: 287k to 1.4M a day while migration churn was being cleaned up, then about
@@ -175,11 +175,12 @@ rows, including masters.
 
 - Replacement: `backup/scripts/prune_audit_log.sh` (table-class policy, monthly
   from devserver's crontab).
-- Restore the old behaviour: `SELECT cron.schedule('45 18 * * *', $$DELETE FROM
-  labit_core.audit_log WHERE changed_at < now() - interval '14 days'$$);`
-- **Open:** `schema/393_audit_log_retention.sql` in the labit-core repo will
-  recreate the job if that migration is ever re-applied; it should be changed to
-  match the new policy. The 09-2026 bloat came from system-actor churn on
+- Restore the old behaviour: `SELECT cron.schedule('audit_log_retention_prune',
+  '45 18 * * *', $$DELETE FROM labit_core.audit_log WHERE changed_at < now() -
+  interval '14 days'$$);`
+- Noted in three places: labit-core migration `schema/913_audit_log_retention_pgcron_retired.sql`
+  (ordered after 393 so re-applying migrations still ends with the job off), a
+  `COMMENT ON TABLE labit_core.audit_log` in the live database, and here. The 09-2026 bloat came from system-actor churn on
   `labit_core.patient` (millions of rows during seeding); with the nightly
   delete off, a future bulk re-seed will grow `audit_log` until the monthly
   prune (which does not touch `patient`) or a manual clean-up. Backups keep

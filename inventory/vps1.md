@@ -92,3 +92,15 @@ at report-generation time, not rebuilt from bytes stored in the database.
 
 After maintenance validate `systemctl --failed`, `pm2 status`, nginx config and
 external health/user journeys for every continuously running application.
+
+## CTO digest job (changed 2026-09-25)
+
+`labbit-cto-digest` (PM2 cron `20 1 * * *`) now runs
+`/opt/labbit-ops/cto-collector/digest.py` directly against Postgres via
+`CTO_DB_DSN` (role `cto_digest`, host 10.0.0.2:5433) using an isolated venv at
+`/opt/labbit-ops/.venv` (psycopg). It replaced the `/api/cto/compact` call,
+which PostgREST truncated to 1000 rows. Code lives in the `labbit-ops` repo
+(commit `2b6e853`). VPS1 has no `psql` binary; Python `psycopg` exists in the
+labit-core, shivam-archive and labbit-ops venvs.
+`labbit-ops-cleanup` (01:35 daily) removes old report PDFs; its database step
+stays off (`CLEANUP_DB_TABLES` unset).

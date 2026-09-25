@@ -64,3 +64,27 @@ PM2 independently. Run `systemctl --failed`, `pm2 status`, and
   objects, extensions, auth dependencies, secrets recovery, and complete backup.
 - TODO: record CPU/RAM/disk, addressing, DNS/firewall, monitoring and alerts.
 - A host snapshot is supplementary only; keep logical dumps and test restores.
+
+## Database maintenance notes (2026-09-25)
+
+- **`labit_core.audit_log`**: had ~1.3 GB of index bloat left over from the
+  earlier multi-million-row deletes (heap only 150 MB, indexes 1,149 MB for
+  183k rows). `VACUUM FULL` reduced the table from 1,322 MB to 164 MB with all
+  rows intact. Retention is now table-class based
+  (`backup/scripts/prune_audit_log.sh`): transactional tables (`result`,
+  `report`, `requisition`, `requisition_item`, `sample`, `sample_event`,
+  `radiology_report`) keep 6 months; masters, `patient`, and any unclassified
+  table are kept indefinitely. Scheduled monthly (05:00 IST on the 1st) from
+  devserver's crontab; dry-run by default, the cron passes `--execute`.
+  Nothing is eligible before about March 2027. NABL retention for clinical
+  audit rows is still a human decision.
+- **`public.cto_service_logs` / `cto_service_daily_digest`**: PostgREST is
+  capped at `PGRST_DB_MAX_ROWS=1000`, which made the old API-based digest
+  cover only the first ~22 minutes of each day. Daily digests for 2026-09-18
+  to 09-24 were recomputed correctly; earlier digests remain sampled (their
+  healthy raw rows are already pruned). Do not raise the global cap; fix
+  consumers instead.
+- New role `cto_digest` (LOGIN, no superuser) for the VPS1 digest job:
+  `SELECT, DELETE` on `cto_service_logs` and `SELECT, INSERT, UPDATE` on
+  `cto_service_daily_digest`, with matching RLS policies (`cto_digest_*`),
+  because both tables are RLS-enabled with no other policies.

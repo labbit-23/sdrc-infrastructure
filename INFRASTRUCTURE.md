@@ -94,3 +94,22 @@ backups.
 - Recorded the 49-row employee source inventory (33 biometric IDs, 16 missing),
   the ZK check-in gap since 16 September, and the target native Core attendance
   boundary. The PII-bearing CSV remains off-repository.
+
+### 2026-09-25
+
+- Renamed the local host to `devserver` in all inventory documents.
+- Enabled age encryption on all backup jobs and added an rclone push to Google
+  Drive (fixed filename per job, Drive version history as off-site retention).
+  Added a pull-based VPS1 backup (`pull_vps1_files.sh`); all three jobs run
+  nightly from devserver (02:00 / 03:30 / 04:00 IST). VPS1 needs nothing
+  installed. A restore/decrypt test with the age key is still outstanding.
+- Inventoried `sdrc-integrations` (Mirth, ERPNext, Sysmex, ZK, DICOM/MWL, DEXA)
+  and `lab-mirth` (formerly `sdrc-h81`). Resolved a swap-exhaustion incident on
+  `sdrc-integrations` (added a second 12 GB swap file).
+- Deleted dormant `/opt/supabase*` clones from VPS1 (6.2 GB).
+- Added `scripts/provision-vps1-like.sh` and `provision-vps2-like.sh` (Ubuntu
+  24.04 runtime bootstrap; dry-run tested only, no spare machine yet).
+- Database maintenance: `audit_log` `VACUUM FULL` (1.3 GB to 164 MB), new
+  audit retention policy, and the CTO digest fix; details in
+  `inventory/vps2.md` and `inventory/vps1.md`.
+

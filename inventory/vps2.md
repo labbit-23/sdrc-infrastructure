@@ -133,10 +133,25 @@ restarted on 2026-09-21 03:38.
     Measured 1,096 ms to 0.92 ms.
   Both are in the `public` schema, so they are rebuilt by the `vps2-public` dump.
   Revert with `DROP INDEX CONCURRENTLY public.<name>`.
-- Candidates not yet analysed: the heavy `labit_core_rw` joins over
-  `requisition_item`/`sample`/`test_parameter` (each about 20,000 s cumulative
-  over six months, 224 to 1,167 ms per call) and `labit_core.patient` (51k
-  sequential scans, 2.2 GB read). These need per-query plans, not guesses.
+- **Slow requisition-item / sample-tube screens (investigated 2026-09-25).**
+  The System Health slow-query panel in `labit-ui` (`app/api/proxy/system/backend-status`)
+  shows the top 5 statements by cumulative `total_exec_time` since 2026-03-26,
+  so it includes the bulk-migration period and overstates today's cost. The
+  tables are small (`requisition_item` 10k rows / 4.7 MB, the whole table only 30
+  days old, about 470 items a day) and the joined tables are well indexed. Plans
+  today: worklist query (`ri.id ... ORDER BY req.created_at DESC LIMIT`) 54 ms
+  with a real user id and limit 1000, 1.6 to 3.3 ms without the doctor filter;
+  barcode lookup (`ri.id = ANY($1)`) reads under 1,000 buffers for 200 items.
+  No missing index found; `parameter (specimen_type_id)` has none but the table
+  is 1,142 rows. Suspects that need live evidence: per-row calls to the SQL
+  function `labit_core.doctor_department_access()` (about 9,900 rows evaluated
+  per call; fine now, grows with data), the barcode lookup being called
+  ~107k times (an N+1 pattern in the app), lock waits, and large windows/limits.
+  **Logging enabled for the next lab day:** `ALTER ROLE labit_core_rw SET
+  log_min_duration_statement = '250ms'` and `log_lock_waits = on` (applies to
+  new sessions, so labit-core's pooled connections pick it up as they recycle).
+  Read it with: `docker logs supabase-db --since 24h 2>&1 | grep -E 'duration:|still waiting'`.
+  Revert with `ALTER ROLE labit_core_rw RESET log_min_duration_statement, RESET log_lock_waits`.
 - Not changed, optional: `shm_size` to ~1 GB at the next container recreation (no `shm` errors in 7
   days); `log_temp_files` to identify the spilling queries.
 

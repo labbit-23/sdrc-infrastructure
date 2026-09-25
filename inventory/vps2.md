@@ -119,8 +119,24 @@ restarted on 2026-09-21 03:38.
   to the impersonated role, the same mechanism Supabase's `anon`/`authenticated`
   statement timeouts rely on. Baseline before the change: 12 GB of temp
   writes; re-check `pg_stat_statements` later to confirm it slowed. Revert with
-  `ALTER ROLE service_role RESET work_mem`. A better fix is an index on
-  `whatsapp_messages (created_at)` (not created yet).
+  `ALTER ROLE service_role RESET work_mem`.
+- **Indexes added 2026-09-25** (`CREATE INDEX CONCURRENTLY`, no write blocking),
+  found from `pg_stat_user_tables` sequential-scan counts and `pg_stat_statements`:
+  - `idx_report_auto_dispatch_jobs_reqno_status` on
+    `public.report_auto_dispatch_jobs (reqno, status)` (664 kB). The queue
+    worker's lookup `WHERE reqno = $1 AND status = $2 AND report_label ILIKE $3`
+    had no index: 4.5 million sequential scans reading 51 GB and 1.39M calls
+    (about 5 hours of cumulative time). Measured 33.5 ms to 0.033 ms.
+  - `idx_whatsapp_messages_created_at` on `public.whatsapp_messages (created_at)`
+    (9.4 MB). The paged `created_at` reads that caused the `service_role` temp
+    spills had no index (all existing ones lead with `lab_id` or `phone`).
+    Measured 1,096 ms to 0.92 ms.
+  Both are in the `public` schema, so they are rebuilt by the `vps2-public` dump.
+  Revert with `DROP INDEX CONCURRENTLY public.<name>`.
+- Candidates not yet analysed: the heavy `labit_core_rw` joins over
+  `requisition_item`/`sample`/`test_parameter` (each about 20,000 s cumulative
+  over six months, 224 to 1,167 ms per call) and `labit_core.patient` (51k
+  sequential scans, 2.2 GB read). These need per-query plans, not guesses.
 - Not changed, optional: `shm_size` to ~1 GB at the next container recreation (no `shm` errors in 7
   days); `log_temp_files` to identify the spilling queries.
 

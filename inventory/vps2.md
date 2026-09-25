@@ -111,15 +111,28 @@ restarted on 2026-09-21 03:38.
   connections pick it up when they recycle or the service restarts. Same
   pattern as `shivam_archive_ro`, which already had `work_mem=32MB`. Revert with
   `ALTER ROLE labit_core_rw RESET work_mem`.
-- **Change 2026-09-25:** `ALTER ROLE service_role SET work_mem = '64MB'`. The
-  `service_role` spills (about 12 GB) are two paged reads of
-  `public.whatsapp_messages` (filter and sort on `created_at`, `LIMIT/OFFSET`)
-  issued through PostgREST by the API layer (`labbit-frontend`, `report_sender`
-  and enqueue workers use the service key). PostgREST applies per-role settings
-  to the impersonated role, the same mechanism Supabase's `anon`/`authenticated`
-  statement timeouts rely on. Baseline before the change: 12 GB of temp
-  writes; re-check `pg_stat_statements` later to confirm it slowed. Revert with
-  `ALTER ROLE service_role RESET work_mem`.
+- **Change 2026-09-25, REVERTED the same evening:** `ALTER ROLE service_role SET
+  work_mem = '64MB'` **broke every API request run as `service_role`**. PostgREST
+  re-applies a role's stored settings itself and lower-cases the value, and
+  Postgres rejects `64mb` (memory units are case-sensitive), so requests failed
+  with `invalid value for parameter "work_mem": "64mb"`. PostgREST caches role
+  settings and only picked the change up at a schema-cache reload, which my later
+  DDL (`COMMENT ON TABLE`) triggered at about 19:44 IST. Impact: about 6 minutes
+  (19:44 to 19:50 IST, after lab hours): the Report delivery screen in labit-main
+  showed the error, and `report-enqueue-watch`'s `requisition_welcome` sends
+  returned 500 for two cycles (60 failed lookups each, on the same 85
+  requisitions it re-checks every 6 minutes and normally skips, so no new welcome
+  messages were lost; back to `skipped=85 failed=0` at 19:55 IST). Fixed with `ALTER ROLE service_role RESET work_mem` plus
+  `NOTIFY pgrst, 'reload schema'` (a plain `ALTER ROLE` does NOT make PostgREST
+  re-read settings).
+  **Rules that follow:** never put a unit-bearing or mixed-case value in a role
+  setting used through PostgREST (`service_role`, `anon`, `authenticated`,
+  `authenticator`); use unitless values (`work_mem` is in kB, so `65536`) and
+  test on a single request; after any change to those roles, send
+  `NOTIFY pgrst, 'reload schema'` and watch the API. `labit_core_rw` is unaffected
+  because labit-core connects directly, not through PostgREST.
+  The dominant `service_role` spill (paged `whatsapp_messages` reads) is fixed by
+  the new index, so the setting is not needed now.
 - **Indexes added 2026-09-25** (`CREATE INDEX CONCURRENTLY`, no write blocking),
   found from `pg_stat_user_tables` sequential-scan counts and `pg_stat_statements`:
   - `idx_report_auto_dispatch_jobs_reqno_status` on

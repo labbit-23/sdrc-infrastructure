@@ -25,7 +25,9 @@ weekly local tiers only; monthly/off-site retention remains TODO.
 | VPS2 Compose/config | One dated archive is present locally; schedule not evidenced | Secret-safe scheduled configuration backup |
 | VPS1 app/config | Framework exists; current scheduled backup not evidenced | Inventory sources and schedule encrypted backup |
 | Orthanc objects + index | Unknown | Discover; consistency-safe backup and test restore |
-| Mirth channels/config | Unknown | Export configuration/channels and test import |
+| Mirth channels/config (sdrc-integrations) | Confirmed NOT backed up (2026-09-25) | Export configuration/channels; extend devserver pipeline (pull over SSH, same model as VPS1) |
+| ERPNext/MariaDB (sdrc-integrations) | Local-only: `bench` cron every 6h, no retention/off-site confirmed | Extend devserver pipeline to pull+encrypt+push existing local dumps off-site |
+| Sysmex/ZK/DICOM/DEXA integration configs (sdrc-integrations) | Confirmed NOT backed up (2026-09-25) | Define scope, extend devserver pipeline |
 | Legacy Oracle/LIMS | Unknown | Define native backup, retention and restore test |
 | Firewall/network config | Unknown | Secret-safe exports after changes and on schedule |
 

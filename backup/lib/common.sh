@@ -51,6 +51,7 @@ load_config() {
         AGE_BINARY AGE_RECIPIENTS_FILE AGE_IDENTITY_FILE KEEP_UNENCRYPTED_ARCHIVE FTP_ENABLED \
         FTP_HOST FTP_PORT FTP_USER FTP_PASSWORD_ENV FTP_REMOTE_DIR FTP_SSL_VERIFY_CERT \
         SYNC_FOLDER_ENABLED SYNC_FOLDER_DIR \
+        RCLONE_ENABLED RCLONE_BINARY RCLONE_REMOTE \
         RETENTION_ENABLED RETENTION_DAILY_DAYS RETENTION_WEEKLY_DAYS RETENTION_WEEKLY_DOW
 
     # Configurations are trusted Bash files so that they can define arrays.
@@ -81,6 +82,9 @@ load_config() {
     : "${FTP_SSL_VERIFY_CERT:=true}"
     : "${SYNC_FOLDER_ENABLED:=false}"
     : "${SYNC_FOLDER_DIR:=}"
+    : "${RCLONE_ENABLED:=false}"
+    : "${RCLONE_BINARY:=rclone}"
+    : "${RCLONE_REMOTE:=}"
     : "${RETENTION_ENABLED:=false}"
     : "${RETENTION_DAILY_DAYS:=14}"
     : "${RETENTION_WEEKLY_DAYS:=84}"
@@ -104,6 +108,13 @@ load_config() {
     if [[ "$SYNC_FOLDER_ENABLED" == "true" ]]; then
         [[ "$SYNC_FOLDER_DIR" == /* ]] || fatal "SYNC_FOLDER_DIR must be an absolute path"
         [[ "$SYNC_FOLDER_DIR" != "/" ]] || fatal "SYNC_FOLDER_DIR must not be the filesystem root"
+    fi
+    [[ "$RCLONE_ENABLED" == "true" || "$RCLONE_ENABLED" == "false" ]] \
+        || fatal "RCLONE_ENABLED must be true or false"
+    [[ -n "$RCLONE_BINARY" ]] || fatal "RCLONE_BINARY must not be empty"
+    if [[ "$RCLONE_ENABLED" == "true" ]]; then
+        [[ "$RCLONE_REMOTE" == *:* ]] \
+            || fatal "RCLONE_REMOTE must be set as remote:path when RCLONE_ENABLED is true"
     fi
     [[ "$FTP_PORT" =~ ^[0-9]+$ ]] && (( 10#$FTP_PORT >= 1 && 10#$FTP_PORT <= 65535 )) \
         || fatal "FTP_PORT must be an integer from 1 to 65535"

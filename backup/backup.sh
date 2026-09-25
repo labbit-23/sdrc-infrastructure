@@ -19,6 +19,8 @@ source "${SCRIPT_DIR}/lib/encrypt.sh"
 source "${SCRIPT_DIR}/lib/upload_ftp.sh"
 # shellcheck source=lib/sync_folder.sh
 source "${SCRIPT_DIR}/lib/sync_folder.sh"
+# shellcheck source=lib/rclone_push.sh
+source "${SCRIPT_DIR}/lib/rclone_push.sh"
 # shellcheck source=lib/retention.sh
 source "${SCRIPT_DIR}/lib/retention.sh"
 
@@ -116,8 +118,8 @@ validate_command_output() {
     local entry="$1"
     local output_name output_command
     IFS='|' read -r output_name output_command <<< "$entry"
-    [[ -n "$output_name" && "$output_name" =~ ^[A-Za-z0-9._-]+\.txt$ && -n "$output_command" ]] \
-        || fatal "Invalid COMMAND_OUTPUTS entry (expected output-name|command): $entry"
+    [[ -n "$output_name" && "$output_name" =~ ^[A-Za-z0-9._-]+\.(txt|tar)$ && -n "$output_command" ]] \
+        || fatal "Invalid COMMAND_OUTPUTS entry (expected output-name|command, name ending .txt or .tar): $entry"
 }
 
 require_command tar
@@ -133,6 +135,9 @@ if [[ "$ENCRYPTION_ENABLED" == "true" ]]; then
 fi
 if [[ "$FTP_ENABLED" == "true" ]]; then
     require_command lftp
+fi
+if [[ "$RCLONE_ENABLED" == "true" ]]; then
+    require_command "$RCLONE_BINARY"
 fi
 
 for source_path in "${BACKUP_PATHS[@]}"; do
@@ -159,11 +164,16 @@ info "Diagnostic command failures are fatal: $COMMAND_OUTPUTS_FATAL"
 info "Encryption enabled: $ENCRYPTION_ENABLED"
 info "FTP upload enabled: $FTP_ENABLED"
 info "Sync-folder publication enabled: $SYNC_FOLDER_ENABLED"
+info "Rclone remote publication enabled: $RCLONE_ENABLED"
 info "Local retention pruning enabled: $RETENTION_ENABLED"
 if [[ "$ENCRYPTION_ENABLED" == "true" ]]; then
     info "Age recipients file: $AGE_RECIPIENTS_FILE"
     info "Age executable: $AGE_BINARY"
     info "Keep unencrypted archive: $KEEP_UNENCRYPTED_ARCHIVE"
+fi
+if [[ "$RCLONE_ENABLED" == "true" ]]; then
+    info "Rclone remote: $RCLONE_REMOTE"
+    info "Rclone executable: $RCLONE_BINARY"
 fi
 
 if [[ "$DRY_RUN" == "true" ]]; then
@@ -188,19 +198,31 @@ for source_path in "${BACKUP_PATHS[@]}"; do
     fi
 done
 
-# Each trusted config entry uses output-name|command. stdout and stderr are
-# captured together so that the resulting text file is useful for diagnosis.
+# Each trusted config entry uses output-name|command. For a .txt entry,
+# stdout and stderr are captured together so the resulting file is useful
+# for diagnosis. For a .tar entry (a binary stream, e.g. a remote tar pull)
+# that would corrupt the archive, so only stdout is captured and stderr is
+# appended to this run's own log instead.
 for command_output in "${COMMAND_OUTPUTS[@]}"; do
     IFS='|' read -r output_name output_command <<< "$command_output"
     if [[ "$DRY_RUN" == "true" ]]; then
         info "DRY RUN: would run command and write command_outputs/$output_name"
     else
         info "Capturing command output: $output_name"
-        if bash -o pipefail -c "$output_command" \
-            > "${WORK_DIR}/command_outputs/${output_name}" 2>&1; then
+        if [[ "$output_name" == *.tar ]]; then
+            command_ok=true
+            bash -o pipefail -c "$output_command" \
+                > "${WORK_DIR}/command_outputs/${output_name}" 2>>"$LOG_FILE" \
+                || { command_ok=false; command_status=$?; }
+        else
+            command_ok=true
+            bash -o pipefail -c "$output_command" \
+                > "${WORK_DIR}/command_outputs/${output_name}" 2>&1 \
+                || { command_ok=false; command_status=$?; }
+        fi
+        if [[ "$command_ok" == "true" ]]; then
             info "Diagnostic command completed: $output_name"
         else
-            command_status=$?
             if [[ "$COMMAND_OUTPUTS_FATAL" == "true" ]]; then
                 fatal "Diagnostic command failed with exit code $command_status: $output_name"
             fi
@@ -216,6 +238,7 @@ else
     mv -- "$ARCHIVE_PARTIAL" "$ARCHIVE"
 fi
 FINAL_ARCHIVE="$ARCHIVE"
+FINAL_ARCHIVE_EXTENSION="tar.zst"
 if [[ "$ENCRYPTION_ENABLED" == "true" ]]; then
     encrypt_archive "$ARCHIVE" "$ENCRYPTED_ARCHIVE_PARTIAL" "$AGE_RECIPIENTS_FILE"
     if [[ "$DRY_RUN" == "true" ]]; then
@@ -225,6 +248,7 @@ if [[ "$ENCRYPTION_ENABLED" == "true" ]]; then
     fi
 
     FINAL_ARCHIVE="$ENCRYPTED_ARCHIVE"
+    FINAL_ARCHIVE_EXTENSION="tar.zst.age"
     generate_checksum "$FINAL_ARCHIVE"
 
     if [[ "$KEEP_UNENCRYPTED_ARCHIVE" == "false" ]]; then
@@ -258,6 +282,8 @@ else
 fi
 
 publish_to_sync_folder "$FINAL_ARCHIVE"
+
+push_to_rclone_remote "$FINAL_ARCHIVE" "$FINAL_ARCHIVE_EXTENSION"
 
 prune_local_archives
 

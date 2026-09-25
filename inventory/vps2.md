@@ -155,3 +155,61 @@ restarted on 2026-09-21 03:38.
 - Not changed, optional: `shm_size` to ~1 GB at the next container recreation (no `shm` errors in 7
   days); `log_temp_files` to identify the spilling queries.
 
+## pg_cron jobs and the audit-log retention job (checked 2026-09-25)
+
+`cron.job` on the `postgres` database:
+
+| Job | Schedule (UTC) | State | What |
+| --- | --- | --- | --- |
+| 1 `system_stats_snapshot_daily` | `30 18 * * *` | active | inserts into `labit_core.system_stats_snapshot` (from labit-core `schema/326`) |
+| 2 (unnamed) | `45 18 * * *` | **unscheduled 2026-09-25** | `DELETE FROM labit_core.audit_log WHERE changed_at < now() - interval '14 days'` (from labit-core `schema/393_audit_log_retention.sql`) |
+
+Job 2 ran nightly from 2026-09-03 and deleted 7,130,332 rows in 22 recorded
+runs: 287k to 1.4M a day while migration churn was being cleaned up, then about
+13k a day (7,940 to 61,287) from 09-15. Everything it removed predates about
+09-10. It was unscheduled before its 09-25 18:45 UTC run, which would have begun
+deleting the first production audit rows (from 2026-09-11), because it conflicts
+with the retention policy set on 2026-09-25 (transactional tables 6 months,
+masters and everything else kept). It applies one rule to every table's audit
+rows, including masters.
+
+- Replacement: `backup/scripts/prune_audit_log.sh` (table-class policy, monthly
+  from devserver's crontab).
+- Restore the old behaviour: `SELECT cron.schedule('45 18 * * *', $$DELETE FROM
+  labit_core.audit_log WHERE changed_at < now() - interval '14 days'$$);`
+- **Open:** `schema/393_audit_log_retention.sql` in the labit-core repo will
+  recreate the job if that migration is ever re-applied; it should be changed to
+  match the new policy. The 09-2026 bloat came from system-actor churn on
+  `labit_core.patient` (millions of rows during seeding); with the nightly
+  delete off, a future bulk re-seed will grow `audit_log` until the monthly
+  prune (which does not touch `patient`) or a manual clean-up. Backups keep
+  audit rows for 30 daily archives, so anything deleted in the last 30 days is
+  recoverable from an archive.
+
+## Slow labit-ui screens: live evidence (2026-09-25 14:01 to 14:07 UTC)
+
+Method: snapshot `pg_stat_statements` before and after a user session, then diff.
+295 statements ran, 71.8 s of database time in about 6 minutes. The heaviest
+touched 0.3 to 2.1 million buffers per call (my isolated test of the same
+queries touched under 1,000), so the live cost is not explained by table size.
+Of the 12 statements averaging over 200,000 buffers per call, **8 have no date
+bound**, so their cost grows with all history:
+
+- pending-tube queue (`WITH required_tubes ...`, 88,790 calls): computes tube
+  counts for every requisition ever, then filters `tube_count > collected_tube_count`
+  afterwards (compute everything, filter last);
+- rejected-sample queue (`WITH item_latest ...`, 12,089 calls, one call
+  returned 0 rows after 2.1M buffers), ready-to-dispatch list (`latest_ready_at`,
+  7,141 calls), and the department pending-count badges (1,902 calls each);
+- a one-off group-by on `diagnotech.newtestresult` (19.5M rows).
+
+Ruled out: generic vs custom plan for the barcode lookup (23 ms vs 7 ms),
+missing indexes on the joined tables, memory. Not yet reproduced: why the live
+per-call buffer counts are so far above the isolated ones.
+Logging: the server has `log_min_messages = fatal`, which hides slow-query
+lines, so `labit_core_rw` now also has `log_min_messages = log`
+(with `log_min_duration_statement = 250ms`, `log_lock_waits = on`). These apply
+only to connections opened after 2026-09-25 ~14:12 UTC; restarting labit-core
+(when the lab is closed) makes the whole pool pick them up. Read with
+`docker logs supabase-db --since 24h 2>&1 | grep -E 'duration:|still waiting'`.
+

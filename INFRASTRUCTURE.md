@@ -25,6 +25,7 @@ Detailed inventories:
 - [VPS1 application server](inventory/vps1.md)
 - [VPS2 Supabase/database and applications](inventory/vps2.md)
 - [Local devserver/application server](inventory/devserver.md)
+- [sdrc-integrations workstation](inventory/sdrc-integrations.md) (Mirth, ERPNext, Sysmex, ZK attendance, DICOM/MWL, DEXA)
 - [Ctrl-S legacy Shivam server](inventory/ctrls-legacy-shivam.md)
 - [Orthanc/DICOM discovery record](inventory/orthanc-dicom.md)
 - [Inventory coverage and unknown systems](inventory/README.md)

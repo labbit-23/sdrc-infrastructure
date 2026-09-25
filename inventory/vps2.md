@@ -11,8 +11,16 @@ Last reviewed: 21 September 2026
 
 ## Supabase
 
-Working directory: `/opt/supabase/docker`. Compose files:
+Working directory: `/opt/supabase/docker`. Compose files in active use:
 `docker-compose.yml` and `docker-compose.labit-db.yml`.
+
+Also present but not confirmed live (found 2026-09-25 while building
+`scripts/provision-vps2-like.sh`): `docker-compose.caddy.yml`,
+`docker-compose.nginx.yml`, `docker-compose.rustfs.yml`,
+`docker-compose.s3.yml`, plus `docker-compose.yml.bak` and
+`docker-compose.yml.lean-working` (stale variants) and `.env.old`/
+`.env.working` alongside the real `.env`. TODO: VERIFY which of the extra
+compose files are actually used vs leftover from earlier iteration.
 
 Observed images on 21 September 2026:
 

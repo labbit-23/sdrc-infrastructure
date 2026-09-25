@@ -68,7 +68,7 @@ Active `.env` locations (used to populate `backup/config/vps1.conf`'s
 `BACKUP_PATHS`, 2026-09-25): `/opt/labbit-ops/cto-collector/.env`,
 `/opt/labbit-py/.env`, `/opt/shivam-archive/.env`,
 `/opt/labit/labit-app/api/.env`, `/opt/labit/labit-core/.env`,
-`/opt/labit/labit-patient/.env.local`, `/opt/labit/labit-deliver/.env`,
+`/opt/labit/labit-patient/.env.local`,
 `/opt/labit/labit-ui/.env.local`, `/opt/labbit-frontend/.env.production`,
 `/opt/labbit-frontend/.env.local`. Values were not read — locations only.
 
@@ -104,3 +104,9 @@ which PostgREST truncated to 1000 rows. Code lives in the `labbit-ops` repo
 labit-core, shivam-archive and labbit-ops venvs.
 `labbit-ops-cleanup` (01:35 daily) removes old report PDFs; its database step
 stays off (`CLEANUP_DB_TABLES` unset).
+
+`/opt/labit/labit-deliver` (76M, deprecated, replaced by `py_utils` report_sender) was
+deleted from VPS1 on 2026-09-25 after confirming it was clean in git, not run by
+PM2, and only referenced in comments. Its `.env` was removed from the backup list;
+older backup archives still contain it. `labit-core`'s `routers/internal.py`
+still exposes its machine-to-machine endpoints (dead API surface).

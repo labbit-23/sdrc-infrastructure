@@ -33,7 +33,6 @@ PATHS=(
     "/opt/labit/labit-app/api/.env"
     "/opt/labit/labit-core/.env"
     "/opt/labit/labit-patient/.env.local"
-    "/opt/labit/labit-deliver/.env"
     "/opt/labit/labit-ui/.env.local"
     "/opt/labbit-frontend/.env.production"
     "/opt/labbit-frontend/.env.local"

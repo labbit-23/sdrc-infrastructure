@@ -27,7 +27,7 @@ outstanding discovery.
 | ERPNext (Frappe bench) | `/opt/frappe-bench` (5.8G) | Site `sdrc.local`. This is the ERPNext host referenced in earlier attendance-migration work (see `runbooks/attendance-erpnext-migration.md`) — not previously tied to this machine in the repo. Per the user (2026-09-25): ERPNext's only real remaining consumer is `zk-attendance`, and that dependency is nearly decoupled — ERPNext is planned for decommissioning once that's complete. Don't invest further backup/ops effort here beyond what's already running. |
 | MariaDB 10.11.14 | — | Backs ERPNext (`mariadb-dump` visible in ERPNext's own backup log, `127.0.0.1:3306`). |
 | Redis ×2 | `127.0.0.1:11000`, `127.0.0.1:13000` | Frappe cache/queue, standard ERPNext dependency. |
-| Sysmex bridge | `/opt/integrations/sysmex` | Hematology analyser interface (PM2: `sysmex-bridge`). |
+| Sysmex bridge | `/opt/integrations/sysmex` | Hematology analyser interface (PM2: `sysmex-bridge`, TCP 1250). On 2026-09-26 it had an established connection from `192.168.134.210` (presumably the analyser), so the live Sysmex path still ended here even though `lab-mirth`'s document also lists a Sysmex bridge; see `lab-mirth.md`. Repo: `labbit-23/integrations`. |
 | ZK attendance panel | `/opt/zk-attendance` (71M) | Biometric check-in integration (PM2: `zk-panel`). |
 | DICOM export / MWL | `/opt/labbit-utils/workers/` (2.0G total) | PM2: `dicom-export-cr`, `mwl-all` (radiology modality worklist). |
 | DEXA app + collector | `/opt/sdrc/sdrc-dexa-app`, `/opt/sdrc/sdrc-dexa-worker/worker` (858M) | PM2: `sdrc-dexa-app`, `sdrc-collector-api`. |

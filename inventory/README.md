@@ -4,8 +4,9 @@ Inventoried: [VPS1](vps1.md), [VPS2](vps2.md), the
 [local devserver/application host](devserver.md), the
 [sdrc-integrations workstation](sdrc-integrations.md) (Mirth, ERPNext,
 Sysmex, ZK attendance, DICOM/MWL, DEXA), the
-[Ctrl-S legacy Shivam server](ctrls-legacy-shivam.md), and an initial
-[Orthanc/DICOM discovery record](orthanc-dicom.md).
+[Ctrl-S legacy Shivam server](ctrls-legacy-shivam.md), an initial
+[Orthanc/DICOM discovery record](orthanc-dicom.md), and
+[drv](drv.md) (LAN helper machine, Wake-on-LAN recipe/log lives there).
 
 Also recorded, from another session's document and user-reported facts only (not
 yet inspected directly): [lab-mirth](lab-mirth.md) (formerly `sdrc-h81`), the

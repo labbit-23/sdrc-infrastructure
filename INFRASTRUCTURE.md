@@ -113,3 +113,10 @@ backups.
   audit retention policy, and the CTO digest fix; details in
   `inventory/vps2.md` and `inventory/vps1.md`.
 
+### 2026-10-06
+
+- Added `scripts/agent-tmux/` and `runbooks/tmux-agent-sessions.md`: Claude Code / Codex sessions that survive a
+  reboot (one stable conversation per named tmux session, via `claude-tmux` / `codex-tmux`, with tmux-resurrect +
+  tmux-continuum). In use on `devserver`; installer sandbox-tested only, real reboot restore not yet proven.
+  Records the pitfalls found (a launcher named `cc` shadows the C compiler; `tmux display-message` needs
+  `-t $TMUX_PANE`; never `systemctl --user stop tmux.service`).

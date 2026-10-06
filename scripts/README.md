@@ -19,3 +19,9 @@ backup archive, kept separate so these stay reusable for a real rebuild,
 not just restore-testing. Untested against real hardware as of writing
 (the target spare machine doesn't exist yet) -- syntax-checked and
 dry-run-verified only; validate for real the first time they're actually used.
+
+## tmux agent sessions
+
+- `agent-tmux/` -- Claude Code / Codex sessions that survive a reboot: stable conversation per named tmux
+  session (`claude-tmux`, `codex-tmux`), `agent-adopt` for already-running agents, and an idempotent
+  `install.sh` for a new machine. Runbook: `runbooks/tmux-agent-sessions.md`.

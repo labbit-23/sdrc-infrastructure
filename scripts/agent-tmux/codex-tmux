@@ -1,0 +1,37 @@
+#!/usr/bin/env bash
+# codex-tmux: one STABLE Codex session per tmux session (Codex cannot be given an id or name at
+# launch, so a short-lived watcher learns the new session's id from the rollout file it creates).
+#   codex-tmux             start, or reopen (codex resume <id>) this tmux session's session
+#   codex-tmux --new       forget the saved session and start a fresh one under this name
+# Limit: if you start another conversation INSIDE codex (/new), run `codex-tmux --new` afterwards.
+set -u
+bin="${CODEX_BIN:-codex}"
+# Ask tmux about THIS pane's session (-t $TMUX_PANE). Without it tmux answers with the most
+# recently active client's session, which would give every pane the same name.
+name=""; [ -n "${TMUX_PANE:-}" ] && name="$(tmux display-message -p -t "$TMUX_PANE" '#S' 2>/dev/null)"
+[ -n "$name" ] || name="$(basename "$PWD")"
+dir="${CODEX_TMUX_DIR:-$HOME/.local/share/codex-tmux}"; mkdir -p "$dir"
+f="$dir/${name//\//_}"
+root="${CODEX_SESSIONS_DIR:-$HOME/.codex/sessions}"
+if [ "${1:-}" = "--new" ]; then rm -f "$f"; shift; fi
+id="$(cat "$f" 2>/dev/null || true)"
+if [ -n "$id" ] && compgen -G "$root/*/*/*/rollout-*-$id.jsonl" >/dev/null; then
+  exec "$bin" "$@" resume "$id"
+fi
+rm -f "$f"
+launch="$(date +%Y-%m-%dT%H-%M-%S)"      # rollout filenames carry LOCAL time in this format
+(
+  for _ in $(seq 1 90); do
+    sleep 2
+    while IFS= read -r p; do
+      b="${p##*/rollout-}"; ts="${b:0:19}"
+      [[ "$ts" < "$launch" ]] && continue                  # older session, not ours
+      head -n1 "$p" | grep -q "\"cwd\":\"$PWD\"" || continue
+      b="${b%.jsonl}"; echo "${b:20}" > "$f"; exit 0       # uuid follows "YYYY-MM-DDTHH-MM-SS-"
+    done < <(find "$root" -name 'rollout-*.jsonl' 2>/dev/null | sort)
+  done
+) &
+watcher=$!
+"$bin" "$@"; rc=$?
+kill "$watcher" 2>/dev/null
+exit $rc

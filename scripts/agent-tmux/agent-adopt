@@ -1,0 +1,94 @@
+#!/usr/bin/env python3
+"""agent-adopt: tie Claude / Codex sessions that are ALREADY RUNNING in tmux panes to their tmux
+session name, so claude-tmux / codex-tmux resume them (instead of starting fresh) after a reboot.
+
+  agent-adopt            list what it would do (read-only)
+  agent-adopt --apply    write the mapping files for the safe cases only
+  agent-adopt --force    with --apply: also overwrite an existing mapping
+
+Proposed id = the newest transcript/rollout for that pane's working folder. That is only a GUESS,
+so it is applied only when exactly ONE pane of that tool uses the folder; panes sharing a folder
+are listed as AMBIGUOUS and skipped (use `echo <id> > <mapping file>` by hand, or restart the
+agent once through claude-tmux/codex-tmux).
+"""
+import collections, glob, os, re, subprocess, sys, time
+
+APPLY = "--apply" in sys.argv
+FORCE = "--force" in sys.argv
+HOME = os.path.expanduser("~")
+MAP = {"claude": os.environ.get("CLAUDE_TMUX_DIR", f"{HOME}/.local/share/claude-tmux"),
+       "codex": os.environ.get("CODEX_TMUX_DIR", f"{HOME}/.local/share/codex-tmux")}
+
+
+def sh(cmd):
+    return subprocess.run(cmd, shell=True, capture_output=True, text=True).stdout
+
+
+def descendants(pid):
+    out, stack = [], [str(pid)]
+    while stack:
+        for k in sh(f"pgrep -P {stack.pop()}").split():
+            out.append(k)
+            stack.append(k)
+    return out
+
+
+def tool_in_pane(pid):
+    for k in descendants(pid):
+        args = sh(f"ps -o args= -p {k}").strip()
+        if re.search(r"(^|/| )claude( |$)", args) and "codex" not in args:
+            return "claude"
+        if re.search(r"bin/codex( |$)|/codex( |$)", args) and "app-server" not in args:
+            return "codex"
+    return None
+
+
+def newest_claude(cwd):
+    enc = re.sub(r"[^A-Za-z0-9]", "-", cwd)
+    files = sorted(glob.glob(f"{HOME}/.claude/projects/{enc}/*.jsonl"), key=os.path.getmtime)
+    return (os.path.basename(files[-1])[:-6], files[-1]) if files else (None, None)
+
+
+def newest_codex(cwd):
+    best = None
+    files = sorted(glob.glob(f"{HOME}/.codex/sessions/*/*/*/rollout-*.jsonl"), key=os.path.getmtime)
+    for p in files[-600:]:
+        try:
+            with open(p) as fh:
+                if f'"cwd":"{cwd}"' in fh.readline():
+                    best = p
+        except OSError:
+            pass
+    return (os.path.basename(best)[-42:-6], best) if best else (None, None)
+
+
+panes = [l.split("\t") for l in sh("tmux list-panes -a -F '#{session_name}\t#{pane_pid}\t#{pane_current_path}'").strip().split("\n") if l]
+rows = []
+for session, pid, cwd in panes:
+    tool = tool_in_pane(pid)
+    if tool:
+        rows.append((session, tool, cwd))
+shared = collections.Counter((t, c) for _, t, c in rows)
+
+print(f"{'tmux session':28} {'tool':7} {'id':38} result")
+for session, tool, cwd in sorted(rows):
+    sid, path = (newest_claude if tool == "claude" else newest_codex)(cwd)
+    mapfile = os.path.join(MAP[tool], session.replace("/", "_"))
+    if not sid:
+        result = "SKIP: no transcript found for this folder"
+    elif shared[(tool, cwd)] > 1:
+        result = "SKIP: AMBIGUOUS, other panes share this folder"
+    elif os.path.exists(mapfile) and not FORCE:
+        result = "SKIP: already mapped (" + open(mapfile).read().strip()[:8] + "...)"
+    else:
+        age = int(time.time() - os.path.getmtime(path)) // 60
+        if APPLY:
+            os.makedirs(MAP[tool], exist_ok=True)
+            with open(mapfile, "w") as fh:
+                fh.write(sid + "\n")
+            result = f"WRITTEN (transcript modified {age} min ago)"
+        else:
+            result = f"would write (transcript modified {age} min ago)"
+    print(f"{session:28} {tool:7} {sid or '-':38} {result}")
+if not APPLY:
+    print("\nread-only. Re-run with --apply to write the safe ones.")

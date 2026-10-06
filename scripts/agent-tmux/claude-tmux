@@ -1,0 +1,22 @@
+#!/usr/bin/env bash
+# claude-tmux: one STABLE Claude Code conversation per tmux session, so tmux-resurrect can
+# bring each pane back to its own conversation (not "most recent in this folder").
+#   claude-tmux            start, or reopen this tmux session's conversation
+#   claude-tmux --new      forget the saved conversation and start a fresh one under this name
+# Extra args are passed through to claude. Set up 2026-10-06; see ~/.tmux.conf (@resurrect-processes).
+set -u
+bin="${CLAUDE_BIN:-claude}"
+# Ask tmux about THIS pane's session (-t $TMUX_PANE). Without it tmux answers with the most
+# recently active client's session, which would give every pane the same name.
+name=""; [ -n "${TMUX_PANE:-}" ] && name="$(tmux display-message -p -t "$TMUX_PANE" '#S' 2>/dev/null)"
+[ -n "$name" ] || name="$(basename "$PWD")"
+dir="${CLAUDE_TMUX_DIR:-$HOME/.local/share/claude-tmux}"; mkdir -p "$dir"
+f="$dir/${name//\//_}"
+if [ "${1:-}" = "--new" ]; then rm -f "$f"; shift; fi
+[ -s "$f" ] || python3 -c 'import uuid;print(uuid.uuid4())' > "$f"
+id="$(cat "$f")"
+if compgen -G "$HOME/.claude/projects/*/$id.jsonl" >/dev/null; then
+  exec "$bin" --resume "$id" --name "$name" "$@"
+else
+  exec "$bin" --session-id "$id" --name "$name" "$@"
+fi
